@@ -281,39 +281,44 @@ export function CustomRowEditor({
         >
           <div className="space-y-2">
             {rows.map((rowNfts, rowIndex) => (
-              <div key={rowIndex} className="flex items-center gap-2">
-                {/* Row controls */}
+              <div key={rowIndex} className="flex items-center gap-3">
+                {/* Row controls - always visible when customized */}
                 {isCustomized && (
-                  <div className="flex flex-col items-center gap-0.5 flex-shrink-0 w-8">
-                    <button
-                      onClick={() => adjustRow(rowIndex, 1)}
-                      className="p-0.5 rounded hover:bg-neutral-200 text-neutral-400 hover:text-neutral-600"
-                      title="Add NFT to this row"
-                    >
-                      <Plus size={14} />
-                    </button>
-                    <span className="text-xs text-neutral-500 font-medium">{rowNfts.length}</span>
+                  <div className="flex items-center gap-1 flex-shrink-0 bg-neutral-100 rounded-lg px-2 py-1">
                     <button
                       onClick={() => adjustRow(rowIndex, -1)}
                       disabled={rowNfts.length <= 1}
-                      className="p-0.5 rounded hover:bg-neutral-200 text-neutral-400 hover:text-neutral-600 disabled:opacity-30 disabled:cursor-not-allowed"
+                      className="p-1 rounded hover:bg-neutral-200 text-neutral-600 disabled:opacity-30 disabled:cursor-not-allowed"
                       title="Remove NFT from this row"
                     >
-                      <Minus size={14} />
+                      <Minus size={16} />
+                    </button>
+                    <span className="text-sm text-neutral-700 font-medium min-w-[24px] text-center">{rowNfts.length}</span>
+                    <button
+                      onClick={() => adjustRow(rowIndex, 1)}
+                      className="p-1 rounded hover:bg-neutral-200 text-neutral-600"
+                      title="Add NFT to this row"
+                    >
+                      <Plus size={16} />
                     </button>
                   </div>
                 )}
 
-                {/* NFTs in this row */}
-                <div className="flex-1 grid gap-1" style={{
-                  gridTemplateColumns: `repeat(${rowNfts.length}, 1fr)`
-                }}>
+                {/* NFTs in this row - with max size limit */}
+                <div className="flex-1 flex gap-1 justify-start">
                   {rowNfts.map((nft) => (
-                    <SortableNFTItem
+                    <div
                       key={`${nft.collection.contractAddress}-${nft.tokenId}`}
-                      nft={nft}
-                      onRemove={() => onRemove(nft)}
-                    />
+                      style={{
+                        flex: `1 1 0`,
+                        maxWidth: rowNfts.length === 1 ? '120px' : rowNfts.length === 2 ? '150px' : '200px'
+                      }}
+                    >
+                      <SortableNFTItem
+                        nft={nft}
+                        onRemove={() => onRemove(nft)}
+                      />
+                    </div>
                   ))}
                 </div>
               </div>

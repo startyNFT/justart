@@ -15,7 +15,8 @@ export function useCdnUrl(
   originalUrl: string | undefined,
   size: ImageSize = 'md'
 ): { url: string; loading: boolean } {
-  const [signedUrl, setSignedUrl] = useState<string>('');
+  // Initialize with originalUrl so image shows immediately
+  const [signedUrl, setSignedUrl] = useState<string>(originalUrl || '');
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -45,6 +46,9 @@ export function useCdnUrl(
       return;
     }
 
+    // Show original URL immediately while we fetch CDN URL
+    setSignedUrl(originalUrl);
+
     // Convert to IPFS URL format for the API
     let ipfsUrl = originalUrl;
     if (originalUrl.includes('ipfs.io/ipfs/')) {
@@ -53,7 +57,7 @@ export function useCdnUrl(
       ipfsUrl = 'ipfs://' + originalUrl.split('/ipfs/')[1];
     }
 
-    // Fetch signed URL from API
+    // Fetch signed URL from API (upgrades to CDN when ready)
     setLoading(true);
     fetch(`/api/image?url=${encodeURIComponent(ipfsUrl)}&size=${size}`)
       .then(res => res.json())
@@ -61,14 +65,11 @@ export function useCdnUrl(
         if (data.url) {
           urlCache.set(cacheKey, data.url);
           setSignedUrl(data.url);
-        } else {
-          // Fallback to original
-          setSignedUrl(originalUrl);
         }
+        // Keep original URL if CDN fails (already set above)
       })
       .catch(() => {
-        // Fallback to original on error
-        setSignedUrl(originalUrl);
+        // Keep original URL on error (already set above)
       })
       .finally(() => {
         setLoading(false);

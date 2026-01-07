@@ -326,6 +326,7 @@ export default function GalleryView() {
           backgroundColor={gallery.background_color}
           hasBackgroundMusic={!!gallery.music_track}
           onVideoStateChange={setIsShowingVideo}
+          onNFTClick={setSelectedNftForRating}
         />
       ) : (
         <div className="min-h-screen p-4 pt-16 md:p-8 md:pt-16">

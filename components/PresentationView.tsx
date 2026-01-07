@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { ChevronLeft, ChevronRight, Pause, Play } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Pause, Play, Star } from 'lucide-react';
 import type { NFT } from '@/lib/stargaze';
 import { getStargazeNFTUrl, isDarkColor } from '@/lib/utils';
 
@@ -12,6 +12,7 @@ type PresentationViewProps = {
   backgroundColor?: string;
   hasBackgroundMusic?: boolean;
   onVideoStateChange?: (isVideo: boolean) => void;
+  onNFTClick?: (nft: NFT) => void;
 };
 
 export function PresentationView({
@@ -21,6 +22,7 @@ export function PresentationView({
   backgroundColor = '#000000',
   hasBackgroundMusic = false,
   onVideoStateChange,
+  onNFTClick,
 }: PresentationViewProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(true);
@@ -353,23 +355,38 @@ export function PresentationView({
             </p>
           )}
 
-          {/* Play/Pause button */}
-          <button
-            onClick={togglePlayPause}
-            className={`inline-flex items-center gap-2 px-4 py-2 ${buttonBg} rounded-full text-sm transition-colors`}
-          >
-            {isPlaying ? (
-              <>
-                <Pause size={16} />
-                Pause
-              </>
-            ) : (
-              <>
-                <Play size={16} />
-                Play
-              </>
+          {/* Control buttons */}
+          <div className="flex items-center justify-center gap-3">
+            {/* Play/Pause button */}
+            <button
+              onClick={togglePlayPause}
+              className={`inline-flex items-center gap-2 px-4 py-2 ${buttonBg} rounded-full text-sm transition-colors`}
+            >
+              {isPlaying ? (
+                <>
+                  <Pause size={16} />
+                  Pause
+                </>
+              ) : (
+                <>
+                  <Play size={16} />
+                  Play
+                </>
+              )}
+            </button>
+
+            {/* Rate button */}
+            {onNFTClick && (
+              <button
+                onClick={() => onNFTClick(currentNft)}
+                className={`inline-flex items-center gap-2 px-4 py-2 ${buttonBg} rounded-full text-sm transition-colors`}
+                title="Rate this NFT"
+              >
+                <Star size={16} />
+                Rate
+              </button>
             )}
-          </button>
+          </div>
         </div>
       </div>
     </div>

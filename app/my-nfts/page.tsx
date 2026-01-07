@@ -143,12 +143,21 @@ export default function MyNFTs() {
       // For non-first pages, check cache first (instant load, no progress bar)
       if (currentPage > 1) {
         const cachedKey = `pureart_nfts_page_${address}_${offset}`;
+        const cachedTotalKey = `pureart_nfts_total_${address}`;
         try {
           const cached = localStorage.getItem(cachedKey);
+          const cachedTotal = localStorage.getItem(cachedTotalKey);
           if (cached) {
             const { data, timestamp } = JSON.parse(cached);
             if (Date.now() - timestamp < 5 * 60 * 1000 && data.length > 0) {
               setNfts(data);
+              // Restore total from cache
+              if (cachedTotal) {
+                const { total: savedTotal, timestamp: totalTs } = JSON.parse(cachedTotal);
+                if (Date.now() - totalTs < 5 * 60 * 1000) {
+                  setTotal(savedTotal);
+                }
+              }
               return; // Instant load from cache, no progress bar needed
             }
           }
@@ -167,6 +176,14 @@ export default function MyNFTs() {
           setNfts(fastResult.nfts);
           setTotal(fastResult.total);
           setLoading(false); // Hide skeleton immediately
+
+          // Cache the total for other pages
+          try {
+            localStorage.setItem(`pureart_nfts_total_${address}`, JSON.stringify({
+              total: fastResult.total,
+              timestamp: Date.now()
+            }));
+          } catch { /* ignore */ }
         }
 
         // Then: Fetch the rest of the page in background
@@ -198,6 +215,13 @@ export default function MyNFTs() {
       setNfts(result.nfts);
       if (result.total > 0) {
         setTotal(result.total);
+        // Cache the total
+        try {
+          localStorage.setItem(`pureart_nfts_total_${address}`, JSON.stringify({
+            total: result.total,
+            timestamp: Date.now()
+          }));
+        } catch { /* ignore */ }
       }
 
       // Complete progress bar to 100%, then hide

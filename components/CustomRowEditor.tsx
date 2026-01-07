@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useCallback } from 'react';
+import { useMemo, useCallback } from 'react';
 import {
   DndContext,
   closestCenter,
@@ -9,19 +9,25 @@ import {
   useSensor,
   useSensors,
   DragEndEvent,
+  DragOverEvent,
+  useDroppable,
 } from '@dnd-kit/core';
 import {
-  arrayMove,
   SortableContext,
   sortableKeyboardCoordinates,
   useSortable,
-  rectSortingStrategy,
+  horizontalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { Plus, Minus, RotateCcw, Wand2, X, GripVertical } from 'lucide-react';
 import type { NFT } from '@/lib/stargaze';
 
-// Sortable NFT item for row editor
+// Get unique key for NFT
+function getNftKey(nft: NFT) {
+  return `${nft.collection.contractAddress}-${nft.tokenId}`;
+}
+
+// Sortable NFT item
 function SortableNFTItem({
   nft,
   onRemove
@@ -36,11 +42,12 @@ function SortableNFTItem({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: `${nft.collection.contractAddress}-${nft.tokenId}` });
+  } = useSortable({ id: getNftKey(nft) });
 
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
+    opacity: isDragging ? 0.5 : 1,
   };
 
   return (
@@ -48,7 +55,7 @@ function SortableNFTItem({
       ref={setNodeRef}
       style={style}
       className={`relative aspect-square bg-neutral-100 rounded overflow-hidden group ${
-        isDragging ? 'z-50 shadow-xl opacity-90' : ''
+        isDragging ? 'z-50 shadow-xl' : ''
       }`}
     >
       <img
@@ -74,6 +81,32 @@ function SortableNFTItem({
       >
         <X size={12} className="text-white" />
       </button>
+    </div>
+  );
+}
+
+// Droppable row container
+function DroppableRow({
+  rowIndex,
+  children,
+  isOver,
+}: {
+  rowIndex: number;
+  children: React.ReactNode;
+  isOver: boolean;
+}) {
+  const { setNodeRef } = useDroppable({
+    id: `row-${rowIndex}`,
+  });
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={`flex-1 flex gap-1 justify-start min-h-[60px] p-1 rounded-lg transition-colors ${
+        isOver ? 'bg-blue-50 ring-2 ring-blue-300' : ''
+      }`}
+    >
+      {children}
     </div>
   );
 }
@@ -135,23 +168,111 @@ export function CustomRowEditor({
     onChange(null);
   }, [onChange]);
 
-  // Handle drag end - reorder NFTs
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
+  // Build rows from NFTs based on row counts
+  const rows = useMemo(() => {
+    const result: NFT[][] = [];
+    let index = 0;
 
-    if (over && active.id !== over.id) {
-      const oldIndex = nfts.findIndex(
-        (nft) => `${nft.collection.contractAddress}-${nft.tokenId}` === active.id
-      );
-      const newIndex = nfts.findIndex(
-        (nft) => `${nft.collection.contractAddress}-${nft.tokenId}` === over.id
-      );
-
-      onReorder(arrayMove(nfts, oldIndex, newIndex));
+    for (const count of activeRowCounts) {
+      result.push(nfts.slice(index, index + count));
+      index += count;
     }
-  };
 
-  // Adjust row count
+    return result;
+  }, [activeRowCounts, nfts]);
+
+  // Find which row an NFT is in
+  const findNftRow = useCallback((nftKey: string): number => {
+    let index = 0;
+    for (let rowIdx = 0; rowIdx < rows.length; rowIdx++) {
+      for (const nft of rows[rowIdx]) {
+        if (getNftKey(nft) === nftKey) {
+          return rowIdx;
+        }
+        index++;
+      }
+    }
+    return -1;
+  }, [rows]);
+
+  // Find NFT index in the flat array
+  const findNftIndex = useCallback((nftKey: string): number => {
+    return nfts.findIndex(nft => getNftKey(nft) === nftKey);
+  }, [nfts]);
+
+  // Handle drag end
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || !isCustomized) return;
+
+    const activeKey = active.id as string;
+    const overId = over.id as string;
+
+    // Check if dropped on a row
+    if (overId.startsWith('row-')) {
+      const targetRowIndex = parseInt(overId.split('-')[1], 10);
+      const sourceRowIndex = findNftRow(activeKey);
+
+      if (sourceRowIndex !== targetRowIndex && sourceRowIndex !== -1) {
+        // Move NFT to different row
+        const activeIndex = findNftIndex(activeKey);
+
+        // Calculate target index (end of target row)
+        let targetIndex = 0;
+        for (let i = 0; i <= targetRowIndex; i++) {
+          targetIndex += activeRowCounts[i];
+        }
+        // Adjust if moving from earlier row
+        if (sourceRowIndex < targetRowIndex) {
+          targetIndex--;
+        }
+
+        // Reorder NFTs
+        const newNfts = [...nfts];
+        const [movedNft] = newNfts.splice(activeIndex, 1);
+        newNfts.splice(targetIndex, 0, movedNft);
+        onReorder(newNfts);
+
+        // Update row counts
+        const newCounts = [...activeRowCounts];
+        newCounts[sourceRowIndex]--;
+        newCounts[targetRowIndex]++;
+
+        // Remove empty rows
+        const filtered = newCounts.filter(c => c > 0);
+        onChange(filtered);
+      }
+    } else {
+      // Dropped on another NFT - reorder within/between rows
+      const overKey = overId;
+      const activeIndex = findNftIndex(activeKey);
+      const overIndex = findNftIndex(overKey);
+
+      if (activeIndex !== overIndex && activeIndex !== -1 && overIndex !== -1) {
+        const sourceRowIndex = findNftRow(activeKey);
+        const targetRowIndex = findNftRow(overKey);
+
+        // Reorder NFTs
+        const newNfts = [...nfts];
+        const [movedNft] = newNfts.splice(activeIndex, 1);
+        newNfts.splice(overIndex, 0, movedNft);
+        onReorder(newNfts);
+
+        // If moving between rows, update row counts
+        if (sourceRowIndex !== targetRowIndex && sourceRowIndex !== -1 && targetRowIndex !== -1) {
+          const newCounts = [...activeRowCounts];
+          newCounts[sourceRowIndex]--;
+          newCounts[targetRowIndex]++;
+
+          // Remove empty rows
+          const filtered = newCounts.filter(c => c > 0);
+          onChange(filtered);
+        }
+      }
+    }
+  }, [isCustomized, findNftRow, findNftIndex, nfts, activeRowCounts, onReorder, onChange]);
+
+  // Adjust row count with buttons
   const adjustRow = useCallback((rowIndex: number, delta: number) => {
     if (!rowCounts) return;
 
@@ -161,7 +282,6 @@ export function CustomRowEditor({
     if (newValue < 1) return;
 
     if (delta > 0) {
-      // Adding - take from another row
       let taken = false;
       for (let i = rowIndex + 1; i < newCounts.length; i++) {
         if (newCounts[i] > 1) {
@@ -181,7 +301,6 @@ export function CustomRowEditor({
       }
       if (!taken) return;
     } else {
-      // Removing - give to next row
       if (rowIndex < newCounts.length - 1) {
         newCounts[rowIndex + 1]++;
       } else if (rowIndex > 0) {
@@ -216,19 +335,6 @@ export function CustomRowEditor({
     onChange(newCounts);
   }, [rowCounts, onChange]);
 
-  // Build rows from NFTs based on row counts
-  const rows = useMemo(() => {
-    const result: NFT[][] = [];
-    let index = 0;
-
-    for (const count of activeRowCounts) {
-      result.push(nfts.slice(index, index + count));
-      index += count;
-    }
-
-    return result;
-  }, [activeRowCounts, nfts]);
-
   if (totalNfts === 0) {
     return (
       <div className="border-2 border-dashed border-neutral-200 rounded-lg p-8 text-center text-neutral-400">
@@ -246,7 +352,7 @@ export function CustomRowEditor({
             {isCustomized ? 'Custom Row Layout' : 'Automatic Row Layout'}
           </h3>
           <p className="text-xs text-neutral-400 mt-0.5">
-            Drag to reorder, click X to remove
+            {isCustomized ? 'Drag NFTs between rows to reorganize' : 'Drag to reorder, click X to remove'}
           </p>
         </div>
 
@@ -275,42 +381,42 @@ export function CustomRowEditor({
         collisionDetection={closestCenter}
         onDragEnd={handleDragEnd}
       >
-        <SortableContext
-          items={nfts.map((nft) => `${nft.collection.contractAddress}-${nft.tokenId}`)}
-          strategy={rectSortingStrategy}
-        >
-          <div className="space-y-2">
-            {rows.map((rowNfts, rowIndex) => (
-              <div key={rowIndex} className="flex items-center gap-3">
-                {/* Row controls - always visible when customized */}
-                {isCustomized && (
-                  <div className="flex items-center gap-1 flex-shrink-0 bg-neutral-100 rounded-lg px-2 py-1">
-                    <button
-                      onClick={() => adjustRow(rowIndex, -1)}
-                      disabled={rowNfts.length <= 1}
-                      className="p-1 rounded hover:bg-neutral-200 text-neutral-600 disabled:opacity-30 disabled:cursor-not-allowed"
-                      title="Remove NFT from this row"
-                    >
-                      <Minus size={16} />
-                    </button>
-                    <span className="text-sm text-neutral-700 font-medium min-w-[24px] text-center">{rowNfts.length}</span>
-                    <button
-                      onClick={() => adjustRow(rowIndex, 1)}
-                      className="p-1 rounded hover:bg-neutral-200 text-neutral-600"
-                      title="Add NFT to this row"
-                    >
-                      <Plus size={16} />
-                    </button>
-                  </div>
-                )}
+        <div className="space-y-2">
+          {rows.map((rowNfts, rowIndex) => (
+            <div key={rowIndex} className="flex items-center gap-3">
+              {/* Row controls */}
+              {isCustomized && (
+                <div className="flex items-center gap-1 flex-shrink-0 bg-neutral-100 rounded-lg px-2 py-1">
+                  <button
+                    onClick={() => adjustRow(rowIndex, -1)}
+                    disabled={rowNfts.length <= 1}
+                    className="p-1 rounded hover:bg-neutral-200 text-neutral-600 disabled:opacity-30 disabled:cursor-not-allowed"
+                    title="Remove NFT from this row"
+                  >
+                    <Minus size={16} />
+                  </button>
+                  <span className="text-sm text-neutral-700 font-medium min-w-[24px] text-center">{rowNfts.length}</span>
+                  <button
+                    onClick={() => adjustRow(rowIndex, 1)}
+                    className="p-1 rounded hover:bg-neutral-200 text-neutral-600"
+                    title="Add NFT to this row"
+                  >
+                    <Plus size={16} />
+                  </button>
+                </div>
+              )}
 
-                {/* NFTs in this row - with max size limit */}
-                <div className="flex-1 flex gap-1 justify-start">
+              {/* Droppable row with sortable NFTs */}
+              <SortableContext
+                items={rowNfts.map(getNftKey)}
+                strategy={horizontalListSortingStrategy}
+              >
+                <DroppableRow rowIndex={rowIndex} isOver={false}>
                   {rowNfts.map((nft) => (
                     <div
-                      key={`${nft.collection.contractAddress}-${nft.tokenId}`}
+                      key={getNftKey(nft)}
                       style={{
-                        flex: `1 1 0`,
+                        flex: '1 1 0',
                         maxWidth: rowNfts.length === 1 ? '120px' : rowNfts.length === 2 ? '150px' : '200px'
                       }}
                     >
@@ -320,11 +426,11 @@ export function CustomRowEditor({
                       />
                     </div>
                   ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </SortableContext>
+                </DroppableRow>
+              </SortableContext>
+            </div>
+          ))}
+        </div>
       </DndContext>
 
       {/* Add/Remove row buttons */}

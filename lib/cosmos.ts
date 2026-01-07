@@ -1,7 +1,7 @@
 import { STARGAZE_RPC, TREASURY_WALLET, GALLERY_PRICE_INCREMENT } from './constants';
 
-// Memo prefix for justart gallery payments
-export const JUSTART_MEMO_PREFIX = 'justart-gallery';
+// Memo prefix for pureart gallery payments
+export const PUREART_MEMO_PREFIX = 'pureart-gallery';
 
 type TransferEvent = {
   sender: string;

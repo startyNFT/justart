@@ -12,7 +12,7 @@ import { fetchNFTPage, fetchNFTsParallel, PAGE_SIZE, type NFT } from '@/lib/star
 import { supabase } from '@/lib/supabase';
 import { generateSlug } from '@/lib/utils';
 import { TREASURY_WALLET } from '@/lib/constants';
-import { fetchPaymentsToTreasury, calculateEffectivePrice, JUSTART_MEMO_PREFIX } from '@/lib/cosmos';
+import { fetchPaymentsToTreasury, calculateEffectivePrice, PUREART_MEMO_PREFIX } from '@/lib/cosmos';
 import type { SizeType, ArrangementType } from '@/lib/constants';
 import { Wallet, Loader2, ArrowRight, ArrowLeft, Layers, Gift, Lock, Unlock } from 'lucide-react';
 
@@ -195,7 +195,7 @@ export default function CreateGallery() {
       if (effectivePrice > 0) {
         const client = await getSigningStargateClient();
         const amount = { denom: 'ustars', amount: String(effectivePrice * 1_000_000) };
-        const memo = `${JUSTART_MEMO_PREFIX}-${Date.now()}`;
+        const memo = `${PUREART_MEMO_PREFIX}-${Date.now()}`;
         const result = await client.sendTokens(
           address,
           TREASURY_WALLET,

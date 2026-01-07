@@ -187,7 +187,7 @@ function mapTokenToNFT(token: {
 }
 
 // Cache helpers
-const CACHE_KEY_PREFIX = 'justart_nfts_page_';
+const CACHE_KEY_PREFIX = 'pureart_nfts_page_';
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 function getCachedPage(walletAddress: string, offset: number): NFT[] | null {

@@ -29,6 +29,16 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  // Transpile cosmos-kit packages for proper bundling
+  transpilePackages: [
+    '@cosmos-kit/react',
+    '@cosmos-kit/core',
+    '@cosmos-kit/keplr',
+    '@cosmos-kit/leap',
+    '@cosmos-kit/walletconnect',
+    'chain-registry',
+    '@chain-registry/types',
+  ],
 };
 
 export default nextConfig;

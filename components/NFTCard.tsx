@@ -11,10 +11,11 @@ type NFTCardProps = {
   onSelect?: () => void;
   selectable?: boolean;
   highRes?: boolean; // Use full resolution image instead of thumbnail
+  onClick?: () => void; // Custom click handler (for rating modal in gallery view)
 };
 
 // Optimized card with video support (no autoplay for performance)
-export const NFTCard = memo(function NFTCard({ nft, selected, onSelect, selectable, highRes }: NFTCardProps) {
+export const NFTCard = memo(function NFTCard({ nft, selected, onSelect, selectable, highRes, onClick }: NFTCardProps) {
   // For videos, always use thumbnail first (video loads on play)
   const isVideo = nft.mediaType === 'video' && nft.animationUrl;
 
@@ -55,10 +56,12 @@ export const NFTCard = memo(function NFTCard({ nft, selected, onSelect, selectab
   const handleClick = useCallback(() => {
     if (selectable && onSelect) {
       onSelect();
+    } else if (onClick) {
+      onClick();
     } else {
       window.open(getStargazeNFTUrl(nft.collection.contractAddress, nft.tokenId), '_blank');
     }
-  }, [nft.collection.contractAddress, nft.tokenId, selectable, onSelect]);
+  }, [nft.collection.contractAddress, nft.tokenId, selectable, onSelect, onClick]);
 
   const handleAudioToggle = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();

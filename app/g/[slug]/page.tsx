@@ -11,8 +11,9 @@ import { supabase, type Gallery, type NFTItem } from '@/lib/supabase';
 import { fetchNFTById, fetchStargazeName, type NFT } from '@/lib/stargaze';
 import { formatNumber, isDarkColor } from '@/lib/utils';
 import type { SizeType, ArrangementType, MusicTrack } from '@/lib/constants';
-import { Eye, Heart, Share2, Loader2, Pencil, Home, Image, LayoutGrid, Plus, Lock } from 'lucide-react';
+import { Eye, Heart, Share2, Loader2, Pencil, Home, Image, LayoutGrid, Plus, Lock, Star } from 'lucide-react';
 import Link from 'next/link';
+import { NFTRatingModal } from '@/components/NFTRatingModal';
 
 export default function GalleryView() {
   const params = useParams();
@@ -35,6 +36,7 @@ export default function GalleryView() {
   const [lockLayout, setLockLayout] = useState(false);
   const [isShowingVideo, setIsShowingVideo] = useState(false);
   const [customRowCounts, setCustomRowCounts] = useState<number[] | null>(null);
+  const [selectedNftForRating, setSelectedNftForRating] = useState<NFT | null>(null);
 
   const isDark = gallery ? isDarkColor(gallery.background_color) : false;
   const textColor = isDark ? 'text-white' : 'text-neutral-900';
@@ -333,6 +335,7 @@ export default function GalleryView() {
             arrangement={arrangement}
             highRes
             customRowCounts={arrangement === 'justified' ? customRowCounts : undefined}
+            onNFTClick={setSelectedNftForRating}
           />
         </div>
       )}
@@ -349,6 +352,27 @@ export default function GalleryView() {
         })()}
         externalPause={arrangement === 'presentation' && isShowingVideo}
       />
+
+      {/* Relaxing Corner link */}
+      <Link
+        href="/relaxing-corner"
+        className={`fixed bottom-4 left-4 z-40 flex items-center gap-2 px-3 py-2 rounded-full ${bgPanel} backdrop-blur-sm border ${borderColor} ${textMuted} hover:${textColor} transition-colors text-sm`}
+        title="View top-rated NFTs"
+      >
+        <Star size={14} className="text-yellow-400" />
+        <span className="hidden sm:inline">Relaxing Corner</span>
+      </Link>
+
+      {/* NFT Rating Modal */}
+      {selectedNftForRating && gallery && (
+        <NFTRatingModal
+          nft={selectedNftForRating}
+          galleryId={gallery.id}
+          walletAddress={address}
+          isOwner={isOwner}
+          onClose={() => setSelectedNftForRating(null)}
+        />
+      )}
     </div>
   );
 }

@@ -73,3 +73,16 @@ export type Like = {
   wallet_address: string;
   created_at: string;
 };
+
+// NFT star rating (1-5) within a gallery context
+// Only visitors can rate, not the gallery owner
+export type NFTRating = {
+  id: string;
+  gallery_id: string;
+  nft_contract: string;
+  nft_token_id: string;
+  wallet_address: string; // who rated
+  stars: number; // 1-5
+  created_at: string;
+  updated_at: string;
+};

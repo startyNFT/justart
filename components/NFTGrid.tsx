@@ -15,6 +15,7 @@ type NFTGridProps = {
   selectable?: boolean;
   selectedIds?: Set<string>;
   onSelect?: (nft: NFT) => void;
+  onNFTClick?: (nft: NFT) => void; // Click handler for gallery view (opens rating modal)
   useThumbnails?: boolean; // Force thumbnails even for large sizes (e.g., selection mode)
   highRes?: boolean; // Use full resolution images (for gallery display)
   customRowCounts?: number[] | null; // Custom row counts for justified layout
@@ -46,12 +47,14 @@ const SimpleCard = memo(function SimpleCard({
   onSelect,
   selectable,
   highRes,
+  onClick,
 }: {
   nft: NFT;
   selected?: boolean;
   onSelect?: () => void;
   selectable?: boolean;
   highRes?: boolean;
+  onClick?: () => void;
 }) {
   const [videoPlaying, setVideoPlaying] = useState(false);
   const [imgError, setImgError] = useState(false);
@@ -88,10 +91,12 @@ const SimpleCard = memo(function SimpleCard({
   const handleClick = useCallback(() => {
     if (selectable && onSelect) {
       onSelect();
+    } else if (onClick) {
+      onClick();
     } else {
       window.open(getStargazeNFTUrl(nft.collection.contractAddress, nft.tokenId), '_blank');
     }
-  }, [nft.collection.contractAddress, nft.tokenId, selectable, onSelect]);
+  }, [nft.collection.contractAddress, nft.tokenId, selectable, onSelect, onClick]);
 
   const handleVideoToggle = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -188,6 +193,7 @@ const JustifiedItem = memo(function JustifiedItem({
   onSelect,
   selectable,
   highRes,
+  onClick,
 }: {
   nft: NFT;
   width: number;
@@ -196,6 +202,7 @@ const JustifiedItem = memo(function JustifiedItem({
   onSelect?: () => void;
   selectable?: boolean;
   highRes?: boolean;
+  onClick?: () => void;
 }) {
   const [videoPlaying, setVideoPlaying] = useState(false);
   const [imgError, setImgError] = useState(false);
@@ -232,10 +239,12 @@ const JustifiedItem = memo(function JustifiedItem({
   const handleClick = useCallback(() => {
     if (selectable && onSelect) {
       onSelect();
+    } else if (onClick) {
+      onClick();
     } else {
       window.open(getStargazeNFTUrl(nft.collection.contractAddress, nft.tokenId), '_blank');
     }
-  }, [nft.collection.contractAddress, nft.tokenId, selectable, onSelect]);
+  }, [nft.collection.contractAddress, nft.tokenId, selectable, onSelect, onClick]);
 
   const handleVideoToggle = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -392,6 +401,7 @@ export function NFTGrid({
   selectable,
   selectedIds,
   onSelect,
+  onNFTClick,
   highRes,
   customRowCounts,
   rowHeights,
@@ -448,6 +458,7 @@ export function NFTGrid({
             selectable={selectable}
             selected={isSelected(nft)}
             onSelect={() => onSelect?.(nft)}
+            onClick={onNFTClick ? () => onNFTClick(nft) : undefined}
             highRes={highRes}
           />
         ))}
@@ -474,6 +485,7 @@ export function NFTGrid({
             selectable={selectable}
             selected={isSelected(nft)}
             onSelect={() => onSelect?.(nft)}
+            onClick={onNFTClick ? () => onNFTClick(nft) : undefined}
             highRes={highRes}
           />
         ))}
@@ -527,6 +539,7 @@ export function NFTGrid({
                     selectable={selectable}
                     selected={isSelected(nft)}
                     onSelect={() => onSelect?.(nft)}
+                    onClick={onNFTClick ? () => onNFTClick(nft) : undefined}
                     highRes={highRes}
                   />
                 ))}
@@ -553,6 +566,7 @@ export function NFTGrid({
                 selectable={selectable}
                 selected={isSelected(nft)}
                 onSelect={() => onSelect?.(nft)}
+                onClick={onNFTClick ? () => onNFTClick(nft) : undefined}
                 highRes={highRes}
               />
             ))}

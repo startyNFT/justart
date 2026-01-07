@@ -36,6 +36,7 @@ export function GalleryCard({ gallery, mode = 'view' }: GalleryCardProps) {
           <GalleryThumbnail
             nftIds={nftIds}
             backgroundColor={gallery.background_color}
+            cachedThumbnails={gallery.cached_thumbnails}
           />
 
           {/* Mode indicator */}

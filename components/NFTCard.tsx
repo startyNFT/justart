@@ -2,6 +2,7 @@
 
 import { memo, useState, useRef, useCallback } from 'react';
 import { getStargazeNFTUrl } from '@/lib/utils';
+import { useCdnUrl } from '@/hooks/useCdnUrl';
 import type { NFT } from '@/lib/stargaze';
 
 type NFTCardProps = {
@@ -14,6 +15,12 @@ type NFTCardProps = {
 
 // Optimized card with video support (no autoplay for performance)
 export const NFTCard = memo(function NFTCard({ nft, selected, onSelect, selectable, highRes }: NFTCardProps) {
+  // For videos, always use thumbnail first (video loads on play)
+  const isVideo = nft.mediaType === 'video' && nft.animationUrl;
+  const originalUrl = isVideo
+    ? (nft.thumbnail || nft.image)  // Videos always show thumbnail
+    : (highRes ? nft.image : (nft.thumbnail || nft.image));
+  const { url: cdnImageUrl } = useCdnUrl(originalUrl, highRes ? 'lg' : 'sm');
   const [isPlaying, setIsPlaying] = useState(false);
   const [videoPlaying, setVideoPlaying] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -41,18 +48,16 @@ export const NFTCard = memo(function NFTCard({ nft, selected, onSelect, selectab
 
   const handleVideoToggle = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!videoRef.current) return;
     if (videoPlaying) {
-      videoRef.current.pause();
+      videoRef.current?.pause();
       setVideoPlaying(false);
     } else {
-      videoRef.current.play();
+      // Video will autoPlay when state changes and element mounts
       setVideoPlaying(true);
     }
   }, [videoPlaying]);
 
   const isAudio = nft.mediaType === 'audio' && nft.audioUrl;
-  const isVideo = nft.mediaType === 'video' && nft.animationUrl;
 
   return (
     <div
@@ -68,21 +73,35 @@ export const NFTCard = memo(function NFTCard({ nft, selected, onSelect, selectab
     >
       {isVideo ? (
         <>
-          <video
-            ref={videoRef}
-            src={nft.animationUrl}
-            className="absolute inset-0 w-full h-full object-cover"
-            loop
-            muted
-            playsInline
-            preload="auto"
-          />
-          {/* Play/pause button - only this area triggers video toggle */}
+          {/* Show thumbnail by default, video only when playing */}
+          {videoPlaying ? (
+            <video
+              ref={videoRef}
+              src={nft.animationUrl}
+              className="absolute inset-0 w-full h-full object-cover"
+              loop
+              muted
+              playsInline
+              autoPlay
+            />
+          ) : cdnImageUrl ? (
+            <img
+              src={cdnImageUrl}
+              alt=""
+              className="absolute inset-0 w-full h-full object-cover"
+              draggable={false}
+              decoding="async"
+              loading="lazy"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-neutral-300 text-xs">
+              No Preview
+            </div>
+          )}
+          {/* Play/pause button */}
           <button
             onClick={handleVideoToggle}
-            className={`absolute bottom-2 right-2 w-10 h-10 bg-black/70 rounded-full flex items-center justify-center transition-opacity ${
-              videoPlaying ? 'opacity-100' : 'opacity-0 hover:opacity-100'
-            }`}
+            className="absolute bottom-2 right-2 w-10 h-10 bg-black/70 rounded-full flex items-center justify-center opacity-80 hover:opacity-100"
           >
             {videoPlaying ? (
               <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
@@ -91,9 +110,9 @@ export const NFTCard = memo(function NFTCard({ nft, selected, onSelect, selectab
             )}
           </button>
         </>
-      ) : (nft.thumbnail || nft.image) ? (
+      ) : cdnImageUrl ? (
         <img
-          src={highRes ? nft.image : (nft.thumbnail || nft.image)}
+          src={cdnImageUrl}
           alt=""
           className="absolute inset-0 w-full h-full object-cover"
           draggable={false}

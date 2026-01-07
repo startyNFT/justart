@@ -9,9 +9,9 @@ import { SizePicker, ArrangementPicker } from '@/components/LayoutPicker';
 import { ColorPicker } from '@/components/ColorPicker';
 import { MusicPicker } from '@/components/MusicPicker';
 import { ConnectWalletButton } from '@/components/ConnectWalletButton';
-import { CustomRowEditor } from '@/components/CustomRowEditor';
+import { CustomRowEditor, type RowConfig, rowConfigsToRowCounts, getRowHeights } from '@/components/CustomRowEditor';
 import { fetchNFTPage, PAGE_SIZE, FAST_INITIAL_SIZE, type NFT } from '@/lib/stargaze';
-import { supabase } from '@/lib/supabase';
+import { supabase, GALLERY_CATEGORIES, type GalleryCategory } from '@/lib/supabase';
 import { generateSlug } from '@/lib/utils';
 import { TREASURY_WALLET } from '@/lib/constants';
 import { fetchPaymentsToTreasury, calculateEffectivePrice, PUREART_MEMO_PREFIX } from '@/lib/cosmos';
@@ -56,10 +56,11 @@ export default function CreateGallery() {
   const [description, setDescription] = useState('');
   const [showInfo, setShowInfo] = useState(true);
   const [lockLayout, setLockLayout] = useState(false);
+  const [category, setCategory] = useState<GalleryCategory | null>(null);
   const [musicTrack, setMusicTrack] = useState<MusicTrack | null>(null);
   const [nftDescriptions, setNftDescriptions] = useState<Record<string, string>>({});
   const [audioNfts, setAudioNfts] = useState<NFT[]>([]);
-  const [customRowCounts, setCustomRowCounts] = useState<number[] | null>(null);
+  const [rowConfigs, setRowConfigs] = useState<RowConfig[] | null>(null);
 
   const [galleryCount, setGalleryCount] = useState(0);
   const [paidSlots, setPaidSlots] = useState(1);
@@ -443,6 +444,18 @@ export default function CreateGallery() {
         };
       });
 
+      // Cache first 4 image URLs for instant gallery preview (skip audio NFTs)
+      // Use full image URL (not thumbnail) for high-res display on homepage
+      const cachedThumbnails: string[] = [];
+      for (const nft of selectedNfts) {
+        if (nft.mediaType === 'audio') continue;
+        const url = nft.image || nft.thumbnail; // Prefer full image
+        if (url) {
+          cachedThumbnails.push(url);
+          if (cachedThumbnails.length >= 4) break;
+        }
+      }
+
       const slug = generateSlug();
       const layout = `${size}-${arrangement}`;
 
@@ -457,8 +470,10 @@ export default function CreateGallery() {
         payment_tx_hash: txHash,
         show_info: showInfo,
         lock_layout: lockLayout,
+        category,
+        cached_thumbnails: cachedThumbnails.length > 0 ? cachedThumbnails : null,
         ...(musicTrack ? { music_track: JSON.stringify(musicTrack) } : {}),
-        ...(customRowCounts ? { custom_row_counts: customRowCounts } : {}),
+        ...(rowConfigs ? { custom_row_counts: rowConfigsToRowCounts(rowConfigs), row_heights: getRowHeights(rowConfigs) } : {}),
       };
 
       const result = await supabase.from('galleries').insert(insertData);
@@ -641,6 +656,28 @@ export default function CreateGallery() {
               <MusicPicker value={musicTrack} onChange={setMusicTrack} audioNfts={audioNfts} loading={loadingCollection} />
               <p className="text-xs text-neutral-400 mt-2">
                 Optional ambient music that plays when visitors view your gallery
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-neutral-700 mb-2">Category</label>
+              <div className="flex flex-wrap gap-2">
+                {GALLERY_CATEGORIES.map((cat) => (
+                  <button
+                    key={cat.value}
+                    onClick={() => setCategory(category === cat.value ? null : cat.value)}
+                    className={`px-3 py-1.5 rounded-full text-sm transition-colors ${
+                      category === cat.value
+                        ? 'bg-neutral-900 text-white'
+                        : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
+                    }`}
+                  >
+                    {cat.label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-neutral-400 mt-2">
+                Help others discover your gallery by selecting a category
               </p>
             </div>
 
@@ -954,8 +991,8 @@ export default function CreateGallery() {
               <div className="p-4 bg-neutral-50 rounded-xl">
                 <CustomRowEditor
                   nfts={selectedNfts}
-                  rowCounts={customRowCounts}
-                  onChange={setCustomRowCounts}
+                  rowConfigs={rowConfigs}
+                  onChange={setRowConfigs}
                   onReorder={setSelectedNfts}
                   onRemove={handleRemoveNft}
                   size={size}
@@ -971,7 +1008,8 @@ export default function CreateGallery() {
                       nfts={selectedNfts}
                       size={size}
                       arrangement="justified"
-                      customRowCounts={customRowCounts}
+                      customRowCounts={rowConfigsToRowCounts(rowConfigs)}
+                      rowHeights={getRowHeights(rowConfigs)}
                     />
                   </div>
                 </div>
@@ -1035,7 +1073,8 @@ export default function CreateGallery() {
               nfts={selectedNfts.slice(0, size === 'small' ? 12 : size === 'medium' ? 8 : 4)}
               size={size}
               arrangement={arrangement}
-              customRowCounts={arrangement === 'justified' ? customRowCounts : undefined}
+              customRowCounts={arrangement === 'justified' ? rowConfigsToRowCounts(rowConfigs) : undefined}
+              rowHeights={arrangement === 'justified' ? getRowHeights(rowConfigs) : undefined}
             />
             {selectedNfts.length > (size === 'small' ? 12 : size === 'medium' ? 8 : 4) && (
               <p className="text-center text-neutral-400 text-sm mt-4">

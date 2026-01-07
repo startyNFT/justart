@@ -11,20 +11,77 @@ type NFTId = {
 type GalleryThumbnailProps = {
   nftIds: NFTId[];
   backgroundColor?: string;
+  cachedThumbnails?: string[] | null; // Pre-cached thumbnail URLs
 };
 
-export function GalleryThumbnail({ nftIds, backgroundColor = '#f5f5f5' }: GalleryThumbnailProps) {
+// Cache for CDN URLs
+const cdnCache = new Map<string, string>();
+
+async function getCdnUrl(url: string): Promise<string> {
+  if (!url || url.startsWith('data:')) return url;
+
+  // Check cache
+  const cached = cdnCache.get(url);
+  if (cached) return cached;
+
+  // Already a CDN URL
+  if (url.includes('i.rscdn.art') || url.includes('i.stargaze-apis.com')) {
+    cdnCache.set(url, url);
+    return url;
+  }
+
+  try {
+    // Convert to IPFS format for API
+    let ipfsUrl = url;
+    if (url.includes('ipfs.io/ipfs/')) {
+      ipfsUrl = 'ipfs://' + url.split('ipfs.io/ipfs/')[1];
+    } else if (url.includes('/ipfs/') && !url.startsWith('ipfs://')) {
+      ipfsUrl = 'ipfs://' + url.split('/ipfs/')[1];
+    }
+
+    const res = await fetch(`/api/image?url=${encodeURIComponent(ipfsUrl)}&size=sm`);
+    const data = await res.json();
+    if (data.url) {
+      cdnCache.set(url, data.url);
+      return data.url;
+    }
+  } catch {
+    // Fall back to original
+  }
+  return url;
+}
+
+export function GalleryThumbnail({ nftIds, backgroundColor = '#f5f5f5', cachedThumbnails }: GalleryThumbnailProps) {
   const [images, setImages] = useState<string[]>([]);
   const [isVideoOnly, setIsVideoOnly] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  // Get up to 8 NFT IDs to have more chances of finding images
+  // Use cached thumbnails if available
+  const hasCachedThumbnails = cachedThumbnails && cachedThumbnails.length > 0;
+
+  // Get up to 12 NFT IDs to have more chances of finding images
   const nftIdsToFetch = useMemo(() => {
+    if (hasCachedThumbnails) return []; // Don't fetch if we have cached thumbnails
     if (!nftIds || !Array.isArray(nftIds)) return [];
-    return nftIds.slice(0, 8).filter(nft => nft?.contract && nft?.token_id);
-  }, [nftIds]);
+    return nftIds.slice(0, 12).filter(nft => nft?.contract && nft?.token_id);
+  }, [nftIds, hasCachedThumbnails]);
 
   useEffect(() => {
+    // If we have cached thumbnails, use them directly
+    if (hasCachedThumbnails) {
+      // Convert cached URLs to CDN URLs
+      Promise.all(cachedThumbnails.slice(0, 4).map(getCdnUrl))
+        .then(cdnUrls => {
+          setImages(cdnUrls);
+          setLoading(false);
+        })
+        .catch(() => {
+          setImages(cachedThumbnails.slice(0, 4));
+          setLoading(false);
+        });
+      return;
+    }
+
     if (nftIdsToFetch.length === 0) {
       setLoading(false);
       return;
@@ -33,47 +90,62 @@ export function GalleryThumbnail({ nftIds, backgroundColor = '#f5f5f5' }: Galler
     let cancelled = false;
 
     async function fetchImages() {
-      try {
-        const nfts = await fetchNFTsById(nftIdsToFetch);
+      const rawUrls: string[] = [];
+      let hasVideo = false;
+
+      // Fetch in small batches until we have 4 images
+      const BATCH_SIZE = 4;
+      for (let i = 0; i < nftIdsToFetch.length && rawUrls.length < 4; i += BATCH_SIZE) {
         if (cancelled) return;
 
-        // Separate images and videos
-        const imageNfts: NFT[] = [];
-        const videoNfts: NFT[] = [];
+        const batch = nftIdsToFetch.slice(i, i + BATCH_SIZE);
+        try {
+          const nfts = await fetchNFTsById(batch);
+          if (cancelled) return;
 
-        for (const nft of nfts) {
-          if (!nft) continue;
-          if (nft.mediaType === 'video') {
-            videoNfts.push(nft);
-          } else if (nft.thumbnail || nft.image) {
-            imageNfts.push(nft);
-          }
-        }
+          for (const nft of nfts) {
+            if (!nft) continue;
+            // Skip audio NFTs - they don't have useful thumbnails
+            if (nft.mediaType === 'audio') continue;
 
-        // Prefer images, take up to 4
-        if (imageNfts.length > 0) {
-          const results = imageNfts.slice(0, 4).map(nft => nft.thumbnail || nft.image || '');
-          setImages(results.filter(Boolean));
-          setIsVideoOnly(false);
-        } else if (videoNfts.length > 0) {
-          // Only videos - just use 1 thumbnail
-          const firstVideo = videoNfts[0];
-          const thumb = firstVideo.thumbnail || firstVideo.image;
-          if (thumb) {
-            setImages([thumb]);
+            const imageUrl = nft.thumbnail || nft.image;
+            if (imageUrl) {
+              rawUrls.push(imageUrl);
+              if (nft.mediaType === 'video') hasVideo = true;
+              if (rawUrls.length >= 4) break;
+            }
           }
-          setIsVideoOnly(true);
+        } catch {
+          // Continue to next batch on error
         }
-      } catch {
-        // Silently fail
       }
+
+      if (cancelled) return;
+
+      // Convert to CDN URLs in parallel
+      if (rawUrls.length > 0) {
+        try {
+          const cdnUrls = await Promise.all(rawUrls.map(getCdnUrl));
+          if (!cancelled) {
+            setImages(cdnUrls);
+            setIsVideoOnly(rawUrls.length === 1 && hasVideo);
+          }
+        } catch {
+          // Use raw URLs as fallback
+          if (!cancelled) {
+            setImages(rawUrls);
+            setIsVideoOnly(rawUrls.length === 1 && hasVideo);
+          }
+        }
+      }
+
       if (!cancelled) setLoading(false);
     }
 
     fetchImages();
 
     return () => { cancelled = true; };
-  }, [nftIdsToFetch]);
+  }, [nftIdsToFetch, hasCachedThumbnails, cachedThumbnails]);
 
   // Loading placeholder
   if (loading) {

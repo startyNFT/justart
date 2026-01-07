@@ -7,13 +7,13 @@ import {
   Image,
   FolderOpen,
   Plus,
-  User,
-  Settings,
+  Compass,
 } from 'lucide-react';
 import { WalletButton } from './WalletButton';
 
 const navItems = [
   { href: '/', icon: Home, label: 'Home' },
+  { href: '/explore', icon: Compass, label: 'Explore' },
   { href: '/my-nfts', icon: Image, label: 'My NFTs' },
   { href: '/my-galleries', icon: FolderOpen, label: 'My Galleries' },
   { href: '/create', icon: Plus, label: 'Create' },

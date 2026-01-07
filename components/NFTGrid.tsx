@@ -3,9 +3,9 @@
 import { useRef, useState, useEffect, memo, useCallback } from 'react';
 import { NFTCard } from './NFTCard';
 import type { NFT } from '@/lib/stargaze';
-import { getOptimizedImageUrl } from '@/lib/stargaze';
 import type { SizeType, ArrangementType, LayoutType } from '@/lib/constants';
 import { getStargazeNFTUrl } from '@/lib/utils';
+import { useCdnUrl } from '@/hooks/useCdnUrl';
 
 type NFTGridProps = {
   nfts: NFT[];
@@ -18,6 +18,7 @@ type NFTGridProps = {
   useThumbnails?: boolean; // Force thumbnails even for large sizes (e.g., selection mode)
   highRes?: boolean; // Use full resolution images (for gallery display)
   customRowCounts?: number[] | null; // Custom row counts for justified layout
+  rowHeights?: number[] | null; // Custom row heights for justified layout
 };
 
 const gridSizeClasses: Record<SizeType, string> = {
@@ -55,6 +56,13 @@ const SimpleCard = memo(function SimpleCard({
   const [videoPlaying, setVideoPlaying] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
 
+  const isVideo = nft.mediaType === 'video' && nft.animationUrl;
+  // For videos, always use thumbnail first
+  const originalUrl = isVideo
+    ? (nft.thumbnail || nft.image)
+    : (highRes ? nft.image : (nft.thumbnail || nft.image));
+  const { url: cdnImageUrl } = useCdnUrl(originalUrl, highRes ? 'lg' : 'md');
+
   const handleClick = useCallback(() => {
     if (selectable && onSelect) {
       onSelect();
@@ -65,17 +73,13 @@ const SimpleCard = memo(function SimpleCard({
 
   const handleVideoToggle = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!videoRef.current) return;
     if (videoPlaying) {
-      videoRef.current.pause();
+      videoRef.current?.pause();
       setVideoPlaying(false);
     } else {
-      videoRef.current.play();
       setVideoPlaying(true);
     }
   }, [videoPlaying]);
-
-  const isVideo = nft.mediaType === 'video' && nft.animationUrl;
 
   return (
     <div
@@ -91,20 +95,33 @@ const SimpleCard = memo(function SimpleCard({
     >
       {isVideo ? (
         <>
-          <video
-            ref={videoRef}
-            src={nft.animationUrl}
-            className="w-full h-auto"
-            loop
-            muted
-            playsInline
-            preload="metadata"
-          />
+          {videoPlaying ? (
+            <video
+              ref={videoRef}
+              src={nft.animationUrl}
+              className="w-full h-auto"
+              loop
+              muted
+              playsInline
+              autoPlay
+            />
+          ) : cdnImageUrl ? (
+            <img
+              src={cdnImageUrl}
+              alt=""
+              className="w-full h-auto"
+              draggable={false}
+              decoding="async"
+              loading="lazy"
+            />
+          ) : (
+            <div className="w-full aspect-square flex items-center justify-center text-neutral-300 text-xs">
+              No Preview
+            </div>
+          )}
           <button
             onClick={handleVideoToggle}
-            className={`absolute bottom-2 right-2 w-10 h-10 bg-black/70 rounded-full flex items-center justify-center transition-opacity ${
-              videoPlaying ? 'opacity-100' : 'opacity-80 hover:opacity-100'
-            }`}
+            className="absolute bottom-2 right-2 w-10 h-10 bg-black/70 rounded-full flex items-center justify-center opacity-80 hover:opacity-100"
           >
             {videoPlaying ? (
               <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
@@ -113,9 +130,9 @@ const SimpleCard = memo(function SimpleCard({
             )}
           </button>
         </>
-      ) : (nft.thumbnail || nft.image) ? (
+      ) : cdnImageUrl ? (
         <img
-          src={highRes ? nft.image : (nft.thumbnail || nft.image)}
+          src={cdnImageUrl}
           alt=""
           className="w-full h-auto"
           draggable={false}
@@ -159,6 +176,13 @@ const JustifiedItem = memo(function JustifiedItem({
   const [videoPlaying, setVideoPlaying] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
 
+  const isVideo = nft.mediaType === 'video' && nft.animationUrl;
+  // For videos, always use thumbnail first
+  const originalUrl = isVideo
+    ? (nft.thumbnail || nft.image)
+    : (highRes ? nft.image : (nft.thumbnail || nft.image));
+  const { url: cdnImageUrl } = useCdnUrl(originalUrl, highRes ? 'lg' : 'md');
+
   const handleClick = useCallback(() => {
     if (selectable && onSelect) {
       onSelect();
@@ -169,17 +193,13 @@ const JustifiedItem = memo(function JustifiedItem({
 
   const handleVideoToggle = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!videoRef.current) return;
     if (videoPlaying) {
-      videoRef.current.pause();
+      videoRef.current?.pause();
       setVideoPlaying(false);
     } else {
-      videoRef.current.play();
       setVideoPlaying(true);
     }
   }, [videoPlaying]);
-
-  const isVideo = nft.mediaType === 'video' && nft.animationUrl;
 
   return (
     <div
@@ -197,20 +217,33 @@ const JustifiedItem = memo(function JustifiedItem({
     >
       {isVideo ? (
         <>
-          <video
-            ref={videoRef}
-            src={nft.animationUrl}
-            className="w-full h-full object-cover"
-            loop
-            muted
-            playsInline
-            preload="metadata"
-          />
+          {videoPlaying ? (
+            <video
+              ref={videoRef}
+              src={nft.animationUrl}
+              className="w-full h-full object-cover"
+              loop
+              muted
+              playsInline
+              autoPlay
+            />
+          ) : cdnImageUrl ? (
+            <img
+              src={cdnImageUrl}
+              alt=""
+              className="w-full h-full object-cover"
+              draggable={false}
+              decoding="async"
+              loading="lazy"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-neutral-300 text-xs">
+              No Preview
+            </div>
+          )}
           <button
             onClick={handleVideoToggle}
-            className={`absolute bottom-2 right-2 w-10 h-10 bg-black/70 rounded-full flex items-center justify-center transition-opacity ${
-              videoPlaying ? 'opacity-100' : 'opacity-80 hover:opacity-100'
-            }`}
+            className="absolute bottom-2 right-2 w-10 h-10 bg-black/70 rounded-full flex items-center justify-center opacity-80 hover:opacity-100"
           >
             {videoPlaying ? (
               <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
@@ -219,9 +252,9 @@ const JustifiedItem = memo(function JustifiedItem({
             )}
           </button>
         </>
-      ) : (nft.thumbnail || nft.image) ? (
+      ) : cdnImageUrl ? (
         <img
-          src={highRes ? nft.image : (nft.thumbnail || nft.image)}
+          src={cdnImageUrl}
           alt=""
           className="w-full h-full object-cover"
           draggable={false}
@@ -313,6 +346,7 @@ export function NFTGrid({
   onSelect,
   highRes,
   customRowCounts,
+  rowHeights,
 }: NFTGridProps) {
   // Legacy support
   if (layout && !arrangement) {
@@ -431,7 +465,8 @@ export function NFTGrid({
             const gap = 4;
             const totalGap = gap * (row.length - 1);
             const itemWidth = (containerWidth - totalGap) / row.length;
-            const rowHeight = justifiedRowHeights[size];
+            // Use custom height if provided, otherwise use default
+            const rowHeight = rowHeights?.[rowIdx] ?? justifiedRowHeights[size];
 
             return (
               <div key={rowIdx} className="flex gap-1 w-full">

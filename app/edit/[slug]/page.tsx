@@ -8,9 +8,9 @@ import { SortableNFTGrid } from '@/components/SortableNFTGrid';
 import { SizePicker, ArrangementPicker } from '@/components/LayoutPicker';
 import { ColorPicker } from '@/components/ColorPicker';
 import { MusicPicker } from '@/components/MusicPicker';
-import { CustomRowEditor } from '@/components/CustomRowEditor';
+import { CustomRowEditor, type RowConfig, rowConfigsToRowCounts, getRowHeights } from '@/components/CustomRowEditor';
 import { fetchNFTPage, fetchNFTById, PAGE_SIZE, type NFT } from '@/lib/stargaze';
-import { supabase, type Gallery } from '@/lib/supabase';
+import { supabase, GALLERY_CATEGORIES, type Gallery, type GalleryCategory } from '@/lib/supabase';
 import type { SizeType, ArrangementType, MusicTrack } from '@/lib/constants';
 import { Loader2, ArrowLeft, Save, Trash2, Lock, Unlock, Search, Filter, X, ChevronLeft, ChevronRight, Layers } from 'lucide-react';
 
@@ -43,10 +43,11 @@ export default function EditGallery() {
   const [description, setDescription] = useState('');
   const [showInfo, setShowInfo] = useState(true);
   const [lockLayout, setLockLayout] = useState(false);
+  const [category, setCategory] = useState<GalleryCategory | null>(null);
   const [musicTrack, setMusicTrack] = useState<MusicTrack | null>(null);
   const [nftDescriptions, setNftDescriptions] = useState<Record<string, string>>({});
   const [audioNfts, setAudioNfts] = useState<NFT[]>([]);
-  const [customRowCounts, setCustomRowCounts] = useState<number[] | null>(null);
+  const [rowConfigs, setRowConfigs] = useState<RowConfig[] | null>(null);
 
   // Search and filter state
   const [searchQuery, setSearchQuery] = useState('');
@@ -202,6 +203,7 @@ export default function EditGallery() {
       setBackgroundColor(galleryData.background_color);
       setShowInfo(galleryData.show_info ?? true);
       setLockLayout(galleryData.lock_layout ?? false);
+      setCategory(galleryData.category as GalleryCategory | null);
       // Parse music track (can be JSON string or null)
       if (galleryData.music_track) {
         try {
@@ -230,9 +232,16 @@ export default function EditGallery() {
         setArrangement(a as ArrangementType);
       }
 
-      // Load custom row counts if available
+      // Load custom row counts if available - convert to RowConfig
       if (galleryData.custom_row_counts) {
-        setCustomRowCounts(galleryData.custom_row_counts);
+        const counts = galleryData.custom_row_counts as number[];
+        const heights = (galleryData.row_heights as number[]) || [];
+        const defaultHeight = size === 'large' ? 200 : size === 'medium' ? 120 : 80;
+        const configs: RowConfig[] = counts.map((count, i) => ({
+          count,
+          height: heights[i] ?? defaultHeight,
+        }));
+        setRowConfigs(configs);
       }
 
       // Fetch selected NFTs from gallery
@@ -412,6 +421,18 @@ export default function EditGallery() {
         };
       });
 
+      // Cache first 4 image URLs for instant gallery preview (skip audio NFTs)
+      // Use full image URL (not thumbnail) for high-res display on homepage
+      const cachedThumbnails: string[] = [];
+      for (const nft of selectedNfts) {
+        if (nft.mediaType === 'audio') continue;
+        const url = nft.image || nft.thumbnail; // Prefer full image
+        if (url) {
+          cachedThumbnails.push(url);
+          if (cachedThumbnails.length >= 4) break;
+        }
+      }
+
       const layout = `${size}-${arrangement}`;
 
       // Try with lock_layout first, fallback without if column doesn't exist
@@ -424,13 +445,15 @@ export default function EditGallery() {
         nft_ids: nftIds,
         show_info: showInfo,
         music_track: musicTrack ? JSON.stringify(musicTrack) : null,
-        custom_row_counts: customRowCounts,
+        custom_row_counts: rowConfigsToRowCounts(rowConfigs),
+        row_heights: getRowHeights(rowConfigs),
+        cached_thumbnails: cachedThumbnails.length > 0 ? cachedThumbnails : null,
       };
 
       // Try with lock_layout
       const result = await supabase
         .from('galleries')
-        .update({ ...updateData, lock_layout: lockLayout })
+        .update({ ...updateData, lock_layout: lockLayout, category })
         .eq('id', gallery.id);
 
       if (result.error?.message?.includes('lock_layout')) {
@@ -680,6 +703,28 @@ export default function EditGallery() {
               <MusicPicker value={musicTrack} onChange={setMusicTrack} audioNfts={audioNfts} loading={loadingCollection} />
               <p className="text-xs text-neutral-400 mt-2">
                 Optional ambient music that plays when visitors view your gallery
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-neutral-700 mb-2">Category</label>
+              <div className="flex flex-wrap gap-2">
+                {GALLERY_CATEGORIES.map((cat) => (
+                  <button
+                    key={cat.value}
+                    onClick={() => setCategory(category === cat.value ? null : cat.value)}
+                    className={`px-3 py-1.5 rounded-full text-sm transition-colors ${
+                      category === cat.value
+                        ? 'bg-neutral-900 text-white'
+                        : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
+                    }`}
+                  >
+                    {cat.label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-neutral-400 mt-2">
+                Help others discover your gallery by selecting a category
               </p>
             </div>
           </div>
@@ -966,8 +1011,8 @@ export default function EditGallery() {
               <div className="p-4 bg-neutral-50 rounded-xl">
                 <CustomRowEditor
                   nfts={selectedNfts}
-                  rowCounts={customRowCounts}
-                  onChange={setCustomRowCounts}
+                  rowConfigs={rowConfigs}
+                  onChange={setRowConfigs}
                   onReorder={setSelectedNfts}
                   onRemove={handleRemoveNft}
                   size={size}
@@ -983,7 +1028,8 @@ export default function EditGallery() {
                       nfts={selectedNfts}
                       size={size}
                       arrangement="justified"
-                      customRowCounts={customRowCounts}
+                      customRowCounts={rowConfigsToRowCounts(rowConfigs)}
+                      rowHeights={getRowHeights(rowConfigs)}
                     />
                   </div>
                 </div>

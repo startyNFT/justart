@@ -21,6 +21,31 @@ export type NFTItem = {
   description?: string; // Optional per-NFT description for presentation mode
 };
 
+export type GalleryCategory =
+  | 'photography'
+  | 'digital-art'
+  | '3d-art'
+  | 'generative'
+  | 'pixel-art'
+  | 'illustration'
+  | 'abstract'
+  | 'nature'
+  | 'portraits'
+  | 'mixed';
+
+export const GALLERY_CATEGORIES: { value: GalleryCategory; label: string }[] = [
+  { value: 'photography', label: 'Photography' },
+  { value: 'digital-art', label: 'Digital Art' },
+  { value: '3d-art', label: '3D Art' },
+  { value: 'generative', label: 'Generative' },
+  { value: 'pixel-art', label: 'Pixel Art' },
+  { value: 'illustration', label: 'Illustration' },
+  { value: 'abstract', label: 'Abstract' },
+  { value: 'nature', label: 'Nature' },
+  { value: 'portraits', label: 'Portraits' },
+  { value: 'mixed', label: 'Mixed' },
+];
+
 export type Gallery = {
   id: string;
   user_id: string;
@@ -36,6 +61,9 @@ export type Gallery = {
   lock_layout: boolean; // If true, viewers cannot change size/arrangement
   music_track: string | null; // ID of curated music track to play
   custom_row_counts: number[] | null; // Custom row layout for justified arrangement
+  row_heights: number[] | null; // Custom row heights for justified arrangement
+  category: GalleryCategory | null; // Gallery category
+  cached_thumbnails: string[] | null; // Cached thumbnail URLs for instant gallery preview
   created_at: string;
 };
 

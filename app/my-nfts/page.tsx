@@ -8,7 +8,7 @@ import { ConnectWalletButton } from '@/components/ConnectWalletButton';
 import { SizePicker, ArrangementPicker } from '@/components/LayoutPicker';
 import { fetchNFTPage, PAGE_SIZE, FAST_INITIAL_SIZE, type NFT } from '@/lib/stargaze';
 import type { SizeType, ArrangementType } from '@/lib/constants';
-import { Wallet, Loader2, ChevronLeft, ChevronRight, Layers } from 'lucide-react';
+import { Wallet, Loader2, ChevronLeft, ChevronRight, Layers, Search, X } from 'lucide-react';
 
 const ITEMS_PER_PAGE = PAGE_SIZE;
 
@@ -43,6 +43,8 @@ export default function MyNFTs() {
   const [size, setSize] = useState<SizeType>('medium');
   const [arrangement, setArrangement] = useState<ArrangementType>('grid');
   const [hideDuplicates, setHideDuplicates] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCollection, setSelectedCollection] = useState<string | null>(null);
 
   // Background loading state
   const [loadingProgress, setLoadingProgress] = useState({ loaded: 0, total: 0 });
@@ -222,16 +224,51 @@ export default function MyNFTs() {
     }
   }, [totalPages, router]);
 
-  // Deduplicate open editions (same collection + same image = duplicate)
+  // Get unique collections for filter dropdown
+  const collections = useMemo(() => {
+    const collectionMap = new Map<string, { name: string; count: number }>();
+    for (const nft of nfts) {
+      const addr = nft.collection.contractAddress;
+      const existing = collectionMap.get(addr);
+      if (existing) {
+        existing.count++;
+      } else {
+        collectionMap.set(addr, { name: nft.collection.name, count: 1 });
+      }
+    }
+    return Array.from(collectionMap.entries())
+      .map(([addr, { name, count }]) => ({ addr, name, count }))
+      .sort((a, b) => b.count - a.count);
+  }, [nfts]);
+
+  // Deduplicate and filter NFTs
   const { displayNfts, duplicateCounts } = useMemo(() => {
+    // First filter by search and collection
+    let filtered = nfts;
+
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(nft =>
+        nft.name.toLowerCase().includes(query) ||
+        nft.collection.name.toLowerCase().includes(query)
+      );
+    }
+
+    if (selectedCollection) {
+      filtered = filtered.filter(nft =>
+        nft.collection.contractAddress === selectedCollection
+      );
+    }
+
+    // Then deduplicate if enabled
     if (!hideDuplicates) {
-      return { displayNfts: nfts, duplicateCounts: new Map<string, number>() };
+      return { displayNfts: filtered, duplicateCounts: new Map<string, number>() };
     }
 
     const seen = new Map<string, NFT>(); // key -> first NFT
     const counts = new Map<string, number>(); // key -> count
 
-    for (const nft of nfts) {
+    for (const nft of filtered) {
       // Key by collection + image URL (open editions have same image)
       const key = `${nft.collection.contractAddress}-${nft.image}`;
       const existing = seen.get(key);
@@ -248,7 +285,7 @@ export default function MyNFTs() {
       displayNfts: Array.from(seen.values()),
       duplicateCounts: counts,
     };
-  }, [nfts, hideDuplicates]);
+  }, [nfts, hideDuplicates, searchQuery, selectedCollection]);
 
   // Generate page numbers to show - memoized
   const pageNumbers = useMemo(() => {
@@ -300,17 +337,64 @@ export default function MyNFTs() {
         </div>
       )}
 
+      {/* Search and filter bar */}
+      <div className="flex flex-col sm:flex-row gap-3 mb-4">
+        {/* Search input */}
+        <div className="relative flex-1">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search NFTs or collections..."
+            className="w-full pl-9 pr-8 py-2 text-sm border border-neutral-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-neutral-200"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-1 hover:bg-neutral-100 rounded"
+            >
+              <X size={14} className="text-neutral-400" />
+            </button>
+          )}
+        </div>
+
+        {/* Collection filter */}
+        {collections.length > 1 && (
+          <select
+            value={selectedCollection || ''}
+            onChange={(e) => setSelectedCollection(e.target.value || null)}
+            className="px-3 py-2 text-sm border border-neutral-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-neutral-200 max-w-[200px]"
+          >
+            <option value="">All Collections ({collections.length})</option>
+            {collections.map(col => (
+              <option key={col.addr} value={col.addr}>
+                {col.name} ({col.count})
+              </option>
+            ))}
+          </select>
+        )}
+      </div>
+
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
         <div className="flex items-center gap-3">
           <p className="text-sm text-neutral-400">
-            {total > 0
-              ? `${total} NFTs`
+            {displayNfts.length > 0
+              ? `${displayNfts.length}${displayNfts.length !== total ? ` of ${total}` : ''} NFTs`
               : loading
               ? 'Loading...'
               : 'No NFTs found'}
           </p>
           {loading && (
             <Loader2 size={14} className="text-neutral-400 animate-spin" />
+          )}
+          {(searchQuery || selectedCollection) && (
+            <button
+              onClick={() => { setSearchQuery(''); setSelectedCollection(null); }}
+              className="text-xs text-neutral-500 hover:text-neutral-700 underline"
+            >
+              Clear filters
+            </button>
           )}
         </div>
         <div className="flex gap-2 overflow-x-auto">

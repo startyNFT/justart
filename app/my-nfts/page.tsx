@@ -7,7 +7,7 @@ import { NFTGrid } from '@/components/NFTGrid';
 import { SizePicker, ArrangementPicker } from '@/components/LayoutPicker';
 import { fetchNFTPage, type NFT } from '@/lib/stargaze';
 import type { SizeType, ArrangementType } from '@/lib/constants';
-import { Wallet, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Wallet, Loader2, ChevronLeft, ChevronRight, Layers } from 'lucide-react';
 
 const ITEMS_PER_PAGE = 50;
 
@@ -21,6 +21,7 @@ export default function MyNFTs() {
   const [total, setTotal] = useState(0);
   const [size, setSize] = useState<SizeType>('medium');
   const [arrangement, setArrangement] = useState<ArrangementType>('grid');
+  const [hideDuplicates, setHideDuplicates] = useState(true); // Default to hiding duplicates
 
   // Get page from URL, default to 1
   const currentPage = Number(searchParams.get('page')) || 1;
@@ -64,6 +65,34 @@ export default function MyNFTs() {
     }
   }, [totalPages, router]);
 
+  // Deduplicate open editions (same collection + same image = duplicate)
+  const { displayNfts, duplicateCounts } = useMemo(() => {
+    if (!hideDuplicates) {
+      return { displayNfts: nfts, duplicateCounts: new Map<string, number>() };
+    }
+
+    const seen = new Map<string, NFT>(); // key -> first NFT
+    const counts = new Map<string, number>(); // key -> count
+
+    for (const nft of nfts) {
+      // Key by collection + image URL (open editions have same image)
+      const key = `${nft.collection.contractAddress}-${nft.image}`;
+      const existing = seen.get(key);
+
+      if (existing) {
+        counts.set(key, (counts.get(key) || 1) + 1);
+      } else {
+        seen.set(key, nft);
+        counts.set(key, 1);
+      }
+    }
+
+    return {
+      displayNfts: Array.from(seen.values()),
+      duplicateCounts: counts,
+    };
+  }, [nfts, hideDuplicates]);
+
   // Generate page numbers to show - memoized
   const pageNumbers = useMemo(() => {
     const pages: (number | string)[] = [];
@@ -105,13 +134,17 @@ export default function MyNFTs() {
     );
   }
 
+  const hiddenCount = nfts.length - displayNfts.length;
+
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
           <p className="text-sm text-neutral-400">
             {total > 0
-              ? `${total} NFTs`
+              ? hideDuplicates && hiddenCount > 0
+                ? `${displayNfts.length} unique (${hiddenCount} duplicates hidden)`
+                : `${total} NFTs`
               : loading
               ? 'Loading...'
               : 'No NFTs found'}
@@ -121,6 +154,18 @@ export default function MyNFTs() {
           )}
         </div>
         <div className="flex gap-2">
+          <button
+            onClick={() => setHideDuplicates(!hideDuplicates)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors ${
+              hideDuplicates
+                ? 'bg-neutral-900 text-white'
+                : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
+            }`}
+            title={hideDuplicates ? 'Show all NFTs' : 'Hide duplicate open editions'}
+          >
+            <Layers size={14} />
+            <span className="hidden sm:inline">{hideDuplicates ? 'Unique' : 'All'}</span>
+          </button>
           <SizePicker value={size} onChange={setSize} />
           <ArrangementPicker value={arrangement} onChange={setArrangement} />
         </div>
@@ -133,7 +178,7 @@ export default function MyNFTs() {
         </div>
       ) : (
         <>
-          <NFTGrid nfts={nfts} size={size} arrangement={arrangement} />
+          <NFTGrid nfts={displayNfts} size={size} arrangement={arrangement} />
 
           {/* Pagination */}
           {totalPages > 1 && (

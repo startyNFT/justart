@@ -60,8 +60,8 @@ export default function MyGalleries() {
   if (!isWalletConnected) {
     return (
       <div className="max-w-7xl mx-auto px-3 md:px-4 py-12 md:py-20 text-center">
-        <Wallet size={48} className="mx-auto text-neutral-300 mb-4" strokeWidth={1} />
-        <p className="text-neutral-400 mb-4">Connect your wallet to see your galleries</p>
+        <Wallet size={48} className="mx-auto text-neutral-300 dark:text-neutral-600 mb-4" strokeWidth={1} />
+        <p className="text-neutral-400 dark:text-neutral-500 mb-4">Connect your wallet to see your galleries</p>
         <ConnectWalletButton />
       </div>
     );
@@ -73,8 +73,8 @@ export default function MyGalleries() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
           {[...Array(3)].map((_, i) => (
             <div key={i} className="animate-pulse">
-              <div className="aspect-[4/3] bg-neutral-100 rounded-lg" />
-              <div className="mt-2 h-4 bg-neutral-100 rounded w-2/3" />
+              <div className="aspect-[4/3] bg-neutral-100 dark:bg-neutral-800 rounded-lg" />
+              <div className="mt-2 h-4 bg-neutral-100 dark:bg-neutral-800 rounded w-2/3" />
             </div>
           ))}
         </div>
@@ -89,20 +89,20 @@ export default function MyGalleries() {
       <div className="flex justify-end mb-4 md:mb-6">
         <Link
           href="/create"
-          className="flex items-center gap-2 px-3 md:px-4 py-2 bg-neutral-900 text-white rounded-lg hover:bg-neutral-800 transition-colors text-sm md:text-base"
+          className="flex items-center gap-2 px-3 md:px-4 py-2 bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 rounded-lg hover:bg-neutral-800 dark:hover:bg-neutral-100 transition-colors text-sm md:text-base"
         >
           <Plus size={18} />
           <span className="hidden sm:inline">Create Gallery</span>
           <span className="sm:hidden">Create</span>
           {nextPrice > 0 && (
-            <span className="text-neutral-400 text-sm hidden sm:inline">({nextPrice} STARS)</span>
+            <span className="text-neutral-400 dark:text-neutral-500 text-sm hidden sm:inline">({nextPrice} STARS)</span>
           )}
         </Link>
       </div>
 
       {galleries.length === 0 ? (
         <div className="py-12 md:py-20 text-center">
-          <p className="text-neutral-400">You haven't created any galleries yet</p>
+          <p className="text-neutral-400 dark:text-neutral-500">You haven't created any galleries yet</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">

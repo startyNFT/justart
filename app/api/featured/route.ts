@@ -51,7 +51,7 @@ async function fetchNFTImage(contract: string, tokenId: string): Promise<string 
   }
 }
 
-export const revalidate = 60; // Cache for 60 seconds
+export const revalidate = 10; // Cache for 10 seconds for fresher data
 
 export async function GET() {
   // Get all galleries (with or without cached_thumbnails)
@@ -114,5 +114,12 @@ export async function GET() {
   // Filter out galleries without images
   const validFeatured = featured.filter(item => item.imageUrl);
 
-  return NextResponse.json({ featured: validFeatured });
+  return NextResponse.json(
+    { featured: validFeatured },
+    {
+      headers: {
+        'Cache-Control': 'public, s-maxage=10, stale-while-revalidate=5',
+      },
+    }
+  );
 }

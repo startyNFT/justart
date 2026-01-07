@@ -185,7 +185,7 @@ export default function ExplorePage() {
   if (loading) {
     return (
       <div className="max-w-7xl mx-auto px-4 py-20 text-center">
-        <Loader2 size={32} className="mx-auto text-neutral-300 animate-spin" />
+        <Loader2 size={32} className="mx-auto text-neutral-300 dark:text-neutral-600 animate-spin" />
       </div>
     );
   }
@@ -196,18 +196,18 @@ export default function ExplorePage() {
       <div className="max-w-7xl mx-auto px-3 md:px-4 py-4 md:py-8">
         {/* Search bar */}
         <div className="relative mb-8">
-          <Search size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-neutral-400" />
+          <Search size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-neutral-400 dark:text-neutral-500" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search galleries by name, creator, or wallet..."
-            className="w-full pl-12 pr-12 py-3 text-lg border border-neutral-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-neutral-200"
+            className="w-full pl-12 pr-12 py-3 text-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white placeholder:text-neutral-400 dark:placeholder:text-neutral-500 rounded-xl focus:outline-none focus:ring-2 focus:ring-neutral-200 dark:focus:ring-neutral-600"
             autoFocus
           />
           <button
             onClick={() => setSearchQuery('')}
-            className="absolute right-4 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600"
+            className="absolute right-4 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600 dark:text-neutral-500 dark:hover:text-neutral-300"
           >
             <X size={20} />
           </button>
@@ -215,11 +215,11 @@ export default function ExplorePage() {
 
         {searching ? (
           <div className="py-12 text-center">
-            <Loader2 size={24} className="mx-auto text-neutral-400 animate-spin" />
+            <Loader2 size={24} className="mx-auto text-neutral-400 dark:text-neutral-500 animate-spin" />
           </div>
         ) : searchResults.length > 0 ? (
           <>
-            <p className="text-sm text-neutral-500 mb-4">{searchResults.length} galleries found</p>
+            <p className="text-sm text-neutral-500 dark:text-neutral-400 mb-4">{searchResults.length} galleries found</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
               {searchResults.map((gallery) => (
                 <GalleryCard key={gallery.id} gallery={gallery} />
@@ -227,7 +227,7 @@ export default function ExplorePage() {
             </div>
           </>
         ) : (
-          <div className="py-12 text-center text-neutral-400">
+          <div className="py-12 text-center text-neutral-400 dark:text-neutral-500">
             No galleries found for "{searchQuery}"
           </div>
         )}
@@ -239,13 +239,13 @@ export default function ExplorePage() {
     <div className="max-w-7xl mx-auto px-3 md:px-4 py-4 md:py-8">
       {/* Search bar */}
       <div className="relative mb-8">
-        <Search size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-neutral-400" />
+        <Search size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-neutral-400 dark:text-neutral-500" />
         <input
           type="text"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           placeholder="Search galleries by name, creator, or wallet..."
-          className="w-full pl-12 pr-4 py-3 text-lg border border-neutral-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-neutral-200"
+          className="w-full pl-12 pr-4 py-3 text-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white placeholder:text-neutral-400 dark:placeholder:text-neutral-500 rounded-xl focus:outline-none focus:ring-2 focus:ring-neutral-200 dark:focus:ring-neutral-600"
         />
       </div>
 
@@ -255,8 +255,8 @@ export default function ExplorePage() {
           onClick={() => setSelectedCategory(null)}
           className={`px-4 py-2 rounded-full text-sm transition-colors ${
             !selectedCategory
-              ? 'bg-neutral-900 text-white'
-              : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
+              ? 'bg-neutral-900 dark:bg-white text-white dark:text-neutral-900'
+              : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700'
           }`}
         >
           All
@@ -267,8 +267,8 @@ export default function ExplorePage() {
             onClick={() => setSelectedCategory(selectedCategory === cat.value ? null : cat.value)}
             className={`px-4 py-2 rounded-full text-sm transition-colors ${
               selectedCategory === cat.value
-                ? 'bg-neutral-900 text-white'
-                : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
+                ? 'bg-neutral-900 dark:bg-white text-white dark:text-neutral-900'
+                : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700'
             }`}
           >
             {cat.label}
@@ -280,10 +280,10 @@ export default function ExplorePage() {
       {!selectedCategory && mostLiked.length > 0 && (
         <section className="mb-12">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-medium">Most Liked of All Time</h2>
+            <h2 className="text-lg font-medium text-neutral-900 dark:text-white">Most Liked of All Time</h2>
             <Link
               href="/explore/most-liked"
-              className="flex items-center gap-1 text-sm text-neutral-500 hover:text-neutral-700"
+              className="flex items-center gap-1 text-sm text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200"
             >
               View All
               <ChevronRight size={16} />
@@ -301,10 +301,10 @@ export default function ExplorePage() {
       {!selectedCategory && mostViewedWeek.length > 0 && (
         <section className="mb-12">
           <div className="flex items-center justify-between mb-5">
-            <h2 className="text-lg font-medium">Most Viewed This Week</h2>
+            <h2 className="text-lg font-medium text-neutral-900 dark:text-white">Most Viewed This Week</h2>
             <Link
               href="/explore/trending"
-              className="flex items-center gap-1 text-sm text-neutral-500 hover:text-neutral-700"
+              className="flex items-center gap-1 text-sm text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200"
             >
               View All
               <ChevronRight size={16} />
@@ -323,18 +323,18 @@ export default function ExplorePage() {
         <section className="mb-12">
           <div className="flex items-center justify-between mb-5">
             <div className="flex items-center gap-3">
-              <h2 className="text-lg font-medium">Random Galleries</h2>
+              <h2 className="text-lg font-medium text-neutral-900 dark:text-white">Random Galleries</h2>
               <button
                 onClick={shuffleRandom}
-                className="p-1.5 rounded-lg hover:bg-neutral-100 transition-colors"
+                className="p-1.5 rounded-lg hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
                 title="Shuffle"
               >
-                <Shuffle size={16} className="text-neutral-400" />
+                <Shuffle size={16} className="text-neutral-400 dark:text-neutral-500" />
               </button>
             </div>
             <Link
               href="/explore/all"
-              className="flex items-center gap-1 text-sm text-neutral-500 hover:text-neutral-700"
+              className="flex items-center gap-1 text-sm text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200"
             >
               View All
               <ChevronRight size={16} />
@@ -351,7 +351,7 @@ export default function ExplorePage() {
       {/* Category sections or filtered view */}
       {selectedCategory ? (
         <section>
-          <h2 className="text-lg font-medium mb-5">
+          <h2 className="text-lg font-medium mb-5 text-neutral-900 dark:text-white">
             {GALLERY_CATEGORIES.find(c => c.value === selectedCategory)?.label} Galleries
           </h2>
           {categoryGalleries[selectedCategory]?.length > 0 ? (
@@ -361,7 +361,7 @@ export default function ExplorePage() {
               ))}
             </div>
           ) : (
-            <div className="py-12 text-center text-neutral-400">
+            <div className="py-12 text-center text-neutral-400 dark:text-neutral-500">
               No galleries in this category yet
             </div>
           )}
@@ -375,10 +375,10 @@ export default function ExplorePage() {
           return (
             <section key={cat.value} className="mb-12">
               <div className="flex items-center justify-between mb-5">
-                <h2 className="text-lg font-medium">{cat.label}</h2>
+                <h2 className="text-lg font-medium text-neutral-900 dark:text-white">{cat.label}</h2>
                 <button
                   onClick={() => setSelectedCategory(cat.value)}
-                  className="flex items-center gap-1 text-sm text-neutral-500 hover:text-neutral-700"
+                  className="flex items-center gap-1 text-sm text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200"
                 >
                   View All
                   <ChevronRight size={16} />

@@ -30,7 +30,7 @@ export function GalleryCard({ gallery, mode = 'view' }: GalleryCardProps) {
     <div className="group relative">
       <Link href={linkHref} className="block">
         {/* Horizontal card with golden ratio (approx 16:10) */}
-        <div className="aspect-[16/10] rounded-xl overflow-hidden relative bg-neutral-100">
+        <div className="aspect-[16/10] rounded-xl overflow-hidden relative bg-neutral-100 dark:bg-neutral-800">
           <GalleryThumbnail
             nftIds={nftIds}
             cachedThumbnails={gallery.cached_thumbnails}
@@ -68,10 +68,10 @@ export function GalleryCard({ gallery, mode = 'view' }: GalleryCardProps) {
 
         {/* Title below card */}
         <div className="mt-2 px-0.5">
-          <h3 className="font-medium text-neutral-900 text-sm truncate">
+          <h3 className="font-medium text-neutral-900 dark:text-white text-sm truncate">
             {gallery.name}
           </h3>
-          <div className="flex items-center gap-2 text-neutral-400 text-xs mt-0.5">
+          <div className="flex items-center gap-2 text-neutral-400 dark:text-neutral-500 text-xs mt-0.5">
             <span className="flex items-center gap-1">
               <Eye size={11} />
               {formatNumber(gallery.views)}
@@ -88,10 +88,10 @@ export function GalleryCard({ gallery, mode = 'view' }: GalleryCardProps) {
       {mode === 'edit' && (
         <Link
           href={`/g/${gallery.slug}`}
-          className="absolute top-3 right-3 p-2 bg-white/90 backdrop-blur-sm rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white"
+          className="absolute top-3 right-3 p-2 bg-white/90 dark:bg-neutral-800/90 backdrop-blur-sm rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white dark:hover:bg-neutral-700"
           title="View gallery"
         >
-          <ExternalLink size={14} className="text-neutral-600" />
+          <ExternalLink size={14} className="text-neutral-600 dark:text-neutral-300" />
         </Link>
       )}
     </div>

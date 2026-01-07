@@ -35,11 +35,11 @@ export default function Home() {
 
   if (!loading && featured.length === 0) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-white">
-        <p className="text-neutral-400 mb-4">No galleries yet</p>
+      <div className="min-h-screen flex flex-col items-center justify-center">
+        <p className="text-neutral-400 dark:text-neutral-500 mb-4">No galleries yet</p>
         <Link
           href="/create"
-          className="px-4 py-2 bg-neutral-900 text-white rounded-lg hover:bg-neutral-800 transition-colors"
+          className="px-4 py-2 bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 rounded-lg hover:bg-neutral-800 dark:hover:bg-neutral-100 transition-colors"
         >
           Create the first one
         </Link>
@@ -59,12 +59,12 @@ export default function Home() {
           setRefreshing(false);
         }}
         disabled={refreshing}
-        className="fixed bottom-4 right-4 md:bottom-6 md:right-6 z-50 p-2.5 md:p-3 bg-white/90 backdrop-blur-sm rounded-full shadow-lg hover:bg-neutral-100 active:scale-90 transition-all duration-150"
+        className="fixed bottom-4 right-4 md:bottom-6 md:right-6 z-50 p-2.5 md:p-3 bg-white/90 dark:bg-neutral-800/90 backdrop-blur-sm rounded-full shadow-lg hover:bg-neutral-100 dark:hover:bg-neutral-700 active:scale-90 transition-all duration-150"
         title="Show different art"
       >
         <RefreshCw
           size={18}
-          className={`md:w-5 md:h-5 text-neutral-600 transition-transform duration-500 ${refreshing ? 'animate-spin' : ''}`}
+          className={`md:w-5 md:h-5 text-neutral-600 dark:text-neutral-300 transition-transform duration-500 ${refreshing ? 'animate-spin' : ''}`}
         />
       </button>
 
@@ -86,8 +86,8 @@ export default function Home() {
 
             <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors duration-300" />
             <div className="absolute bottom-0 left-0 right-0 p-4 md:p-6 translate-y-full group-hover:translate-y-0 transition-transform duration-300">
-              <div className="bg-white/95 backdrop-blur-sm rounded-lg p-3 md:p-4">
-                <p className="font-medium text-neutral-900 truncate text-sm md:text-base">{item.name}</p>
+              <div className="bg-white/95 dark:bg-neutral-900/95 backdrop-blur-sm rounded-lg p-3 md:p-4">
+                <p className="font-medium text-neutral-900 dark:text-white truncate text-sm md:text-base">{item.name}</p>
               </div>
             </div>
           </Link>
@@ -100,7 +100,7 @@ export default function Home() {
           {[0, 1, 2].map((index) => (
             <div
               key={index}
-              className={`bg-neutral-100 animate-pulse ${
+              className={`bg-neutral-100 dark:bg-neutral-800 animate-pulse ${
                 index === 2 ? 'hidden lg:block' : index === 1 ? 'hidden sm:block' : ''
               }`}
             />

@@ -6,7 +6,11 @@ import { truncateAddress } from '@/lib/utils';
 import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 
-export function WalletButton() {
+interface WalletButtonProps {
+  variant?: 'default' | 'dark' | 'light';
+}
+
+export function WalletButton({ variant = 'default' }: WalletButtonProps) {
   const { address, disconnect, isWalletConnected } = useChain('stargaze');
   const keplrWallet = useChainWallet('stargaze', 'keplr-extension', false);
   const leapWallet = useChainWallet('stargaze', 'leap-extension', false);
@@ -159,12 +163,56 @@ export function WalletButton() {
     document.body
   ) : null;
 
+  // Variant-based styling
+  const getButtonClasses = () => {
+    if (variant === 'dark') {
+      return isWalletConnected
+        ? 'p-2 rounded-lg bg-white/20 text-white hover:bg-white/30 transition-colors'
+        : 'p-2 rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition-colors';
+    } else if (variant === 'light') {
+      return isWalletConnected
+        ? 'p-2 rounded-lg bg-black/10 text-neutral-900 hover:bg-black/20 transition-colors'
+        : 'p-2 rounded-lg text-neutral-500 hover:text-neutral-700 hover:bg-black/5 transition-colors';
+    }
+    // default
+    return isWalletConnected
+      ? 'p-2 rounded-lg bg-neutral-100 text-neutral-900 transition-colors'
+      : 'p-2 rounded-lg text-neutral-400 hover:text-neutral-600 hover:bg-neutral-50 transition-colors';
+  };
+
+  const getMenuClasses = () => {
+    if (variant === 'dark') {
+      return 'absolute right-0 top-full mt-2 bg-neutral-900 rounded-lg shadow-lg border border-white/10 py-1 min-w-[180px] z-50';
+    } else if (variant === 'light') {
+      return 'absolute right-0 top-full mt-2 bg-white rounded-lg shadow-lg border border-black/10 py-1 min-w-[180px] z-50';
+    }
+    return 'absolute right-0 top-full mt-2 bg-white rounded-lg shadow-lg border border-neutral-100 py-1 min-w-[180px] z-50';
+  };
+
+  const getMenuTextClasses = () => {
+    if (variant === 'dark') {
+      return {
+        address: 'px-3 py-2 text-sm text-white/60 border-b border-white/10',
+        button: 'w-full px-3 py-2 text-left text-sm text-white/80 hover:bg-white/10 flex items-center gap-2',
+      };
+    } else if (variant === 'light') {
+      return {
+        address: 'px-3 py-2 text-sm text-neutral-500 border-b border-black/10',
+        button: 'w-full px-3 py-2 text-left text-sm text-neutral-700 hover:bg-black/5 flex items-center gap-2',
+      };
+    }
+    return {
+      address: 'px-3 py-2 text-sm text-neutral-500 border-b border-neutral-100',
+      button: 'w-full px-3 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-50 flex items-center gap-2',
+    };
+  };
+
   if (!isWalletConnected) {
     return (
       <>
         <button
           onClick={() => setShowWalletPicker(true)}
-          className="p-2 rounded-lg text-neutral-400 hover:text-neutral-600 hover:bg-neutral-50 transition-colors"
+          className={getButtonClasses()}
           title="Connect Wallet"
         >
           <User size={20} strokeWidth={1.5} />
@@ -174,19 +222,21 @@ export function WalletButton() {
     );
   }
 
+  const menuTextClasses = getMenuTextClasses();
+
   return (
     <div className="relative" ref={menuRef}>
       <button
         onClick={() => setShowMenu(!showMenu)}
-        className="p-2 rounded-lg bg-neutral-100 text-neutral-900 transition-colors"
+        className={getButtonClasses()}
         title={address}
       >
         <User size={20} strokeWidth={1.5} />
       </button>
 
       {showMenu && (
-        <div className="absolute right-0 top-full mt-2 bg-white rounded-lg shadow-lg border border-neutral-100 py-1 min-w-[180px] z-50">
-          <div className="px-3 py-2 text-sm text-neutral-500 border-b border-neutral-100">
+        <div className={getMenuClasses()}>
+          <div className={menuTextClasses.address}>
             {truncateAddress(address || '')}
           </div>
           <button
@@ -194,7 +244,7 @@ export function WalletButton() {
               disconnect();
               setShowMenu(false);
             }}
-            className="w-full px-3 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-50 flex items-center gap-2"
+            className={menuTextClasses.button}
           >
             <LogOut size={16} />
             Disconnect

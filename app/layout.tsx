@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
 import { CosmosProvider } from '@/providers/CosmosProvider';
+import { ThemeProvider } from '@/providers/ThemeProvider';
 import { Header } from '@/components/Header';
 import { MainWrapper } from '@/components/MainWrapper';
 
@@ -18,14 +19,16 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body className={inter.className}>
-        <CosmosProvider>
-          <Header />
-          <MainWrapper>
-            {children}
-          </MainWrapper>
-        </CosmosProvider>
+        <ThemeProvider>
+          <CosmosProvider>
+            <Header />
+            <MainWrapper>
+              {children}
+            </MainWrapper>
+          </CosmosProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

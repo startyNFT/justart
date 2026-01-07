@@ -147,7 +147,7 @@ export function ConnectWalletButton({ className, children }: Props) {
     <>
       <button
         onClick={() => setShowWalletPicker(true)}
-        className={className || "px-4 py-2 bg-neutral-900 text-white rounded-lg hover:bg-neutral-800 transition-colors"}
+        className={className || "px-4 py-2 bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 rounded-lg hover:bg-neutral-800 dark:hover:bg-neutral-100 transition-colors"}
       >
         {children || 'Connect Wallet'}
       </button>

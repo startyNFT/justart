@@ -15,8 +15,8 @@ const ITEMS_PER_PAGE = PAGE_SIZE;
 // Skeleton card for loading state
 function SkeletonCard() {
   return (
-    <div className="aspect-square bg-neutral-100 rounded-lg animate-pulse">
-      <div className="w-full h-full bg-gradient-to-br from-neutral-100 to-neutral-200" />
+    <div className="aspect-square bg-neutral-100 dark:bg-neutral-800 rounded-lg animate-pulse">
+      <div className="w-full h-full bg-gradient-to-br from-neutral-100 to-neutral-200 dark:from-neutral-800 dark:to-neutral-700" />
     </div>
   );
 }
@@ -308,7 +308,7 @@ export default function MyNFTs() {
   if (!mounted) {
     return (
       <div className="max-w-7xl mx-auto px-4 py-20 text-center">
-        <Loader2 size={32} className="mx-auto text-neutral-300 animate-spin" />
+        <Loader2 size={32} className="mx-auto text-neutral-300 dark:text-neutral-600 animate-spin" />
       </div>
     );
   }
@@ -316,8 +316,8 @@ export default function MyNFTs() {
   if (!isWalletConnected) {
     return (
       <div className="max-w-7xl mx-auto px-4 py-20 text-center">
-        <Wallet size={48} className="mx-auto text-neutral-300 mb-4" strokeWidth={1} />
-        <p className="text-neutral-400 mb-4">Connect your wallet to see your NFTs</p>
+        <Wallet size={48} className="mx-auto text-neutral-300 dark:text-neutral-600 mb-4" strokeWidth={1} />
+        <p className="text-neutral-400 dark:text-neutral-500 mb-4">Connect your wallet to see your NFTs</p>
         <ConnectWalletButton />
       </div>
     );
@@ -328,9 +328,9 @@ export default function MyNFTs() {
       {/* Loading progress bar - only shows during current page load */}
       {loading && (
         <div className="mb-4">
-          <div className="h-1 bg-neutral-200 rounded-full overflow-hidden">
+          <div className="h-1 bg-neutral-200 dark:bg-neutral-700 rounded-full overflow-hidden">
             <div
-              className="h-full bg-neutral-900 rounded-full transition-all duration-150 ease-out"
+              className="h-full bg-neutral-900 dark:bg-white rounded-full transition-all duration-150 ease-out"
               style={{ width: `${initialProgress}%` }}
             />
           </div>
@@ -341,20 +341,20 @@ export default function MyNFTs() {
       <div className="flex flex-col sm:flex-row gap-3 mb-4">
         {/* Search input */}
         <div className="relative flex-1">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400 dark:text-neutral-500" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search NFTs or collections..."
-            className="w-full pl-9 pr-8 py-2 text-sm border border-neutral-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-neutral-200"
+            className="w-full pl-9 pr-8 py-2 text-sm border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white placeholder:text-neutral-400 dark:placeholder:text-neutral-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-neutral-200 dark:focus:ring-neutral-600"
           />
           {searchQuery && (
             <button
               onClick={() => setSearchQuery('')}
-              className="absolute right-2 top-1/2 -translate-y-1/2 p-1 hover:bg-neutral-100 rounded"
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-1 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded"
             >
-              <X size={14} className="text-neutral-400" />
+              <X size={14} className="text-neutral-400 dark:text-neutral-500" />
             </button>
           )}
         </div>
@@ -364,7 +364,7 @@ export default function MyNFTs() {
           <select
             value={selectedCollection || ''}
             onChange={(e) => setSelectedCollection(e.target.value || null)}
-            className="px-3 py-2 text-sm border border-neutral-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-neutral-200 max-w-[200px]"
+            className="px-3 py-2 text-sm border border-neutral-200 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-neutral-200 dark:focus:ring-neutral-600 max-w-[200px]"
           >
             <option value="">All Collections ({collections.length})</option>
             {collections.map(col => (
@@ -378,7 +378,7 @@ export default function MyNFTs() {
 
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
         <div className="flex items-center gap-3">
-          <p className="text-sm text-neutral-400">
+          <p className="text-sm text-neutral-400 dark:text-neutral-500">
             {displayNfts.length > 0
               ? `${displayNfts.length}${displayNfts.length !== total ? ` of ${total}` : ''} NFTs`
               : loading
@@ -386,12 +386,12 @@ export default function MyNFTs() {
               : 'No NFTs found'}
           </p>
           {loading && (
-            <Loader2 size={14} className="text-neutral-400 animate-spin" />
+            <Loader2 size={14} className="text-neutral-400 dark:text-neutral-500 animate-spin" />
           )}
           {(searchQuery || selectedCollection) && (
             <button
               onClick={() => { setSearchQuery(''); setSelectedCollection(null); }}
-              className="text-xs text-neutral-500 hover:text-neutral-700 underline"
+              className="text-xs text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200 underline"
             >
               Clear filters
             </button>
@@ -402,8 +402,8 @@ export default function MyNFTs() {
             onClick={() => setHideDuplicates(!hideDuplicates)}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors flex-shrink-0 ${
               hideDuplicates
-                ? 'bg-neutral-900 text-white'
-                : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
+                ? 'bg-neutral-900 dark:bg-white text-white dark:text-neutral-900'
+                : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700'
             }`}
             title={hideDuplicates ? 'Show all NFTs' : 'Hide duplicate open editions'}
           >
@@ -427,7 +427,7 @@ export default function MyNFTs() {
               <button
                 onClick={() => goToPage(currentPage - 1)}
                 disabled={currentPage === 1}
-                className="p-2 rounded-lg hover:bg-neutral-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                className="p-2 rounded-lg hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-900 dark:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
               >
                 <ChevronLeft size={20} />
               </button>
@@ -439,21 +439,21 @@ export default function MyNFTs() {
                     onClick={() => goToPage(page)}
                     className={`min-w-[40px] h-10 rounded-lg text-sm font-medium transition-colors ${
                       currentPage === page
-                        ? 'bg-neutral-900 text-white'
-                        : 'hover:bg-neutral-100'
+                        ? 'bg-neutral-900 dark:bg-white text-white dark:text-neutral-900'
+                        : 'hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-900 dark:text-white'
                     }`}
                   >
                     {page}
                   </button>
                 ) : (
-                  <span key={i} className="px-2 text-neutral-400">...</span>
+                  <span key={i} className="px-2 text-neutral-400 dark:text-neutral-500">...</span>
                 )
               ))}
 
               <button
                 onClick={() => goToPage(currentPage + 1)}
                 disabled={currentPage === totalPages}
-                className="p-2 rounded-lg hover:bg-neutral-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                className="p-2 rounded-lg hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-900 dark:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
               >
                 <ChevronRight size={20} />
               </button>

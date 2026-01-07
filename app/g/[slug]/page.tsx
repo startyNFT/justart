@@ -14,6 +14,7 @@ import type { SizeType, ArrangementType, MusicTrack } from '@/lib/constants';
 import { Eye, Heart, Share2, Loader2, Pencil, Home, Image, LayoutGrid, Plus, Lock, Star } from 'lucide-react';
 import Link from 'next/link';
 import { NFTRatingModal } from '@/components/NFTRatingModal';
+import { WalletButton } from '@/components/WalletButton';
 
 export default function GalleryView() {
   const params = useParams();
@@ -296,6 +297,7 @@ export default function GalleryView() {
                 <Pencil size={18} />
               </button>
             )}
+            <WalletButton variant={isDark ? 'dark' : 'light'} />
             <button
               onClick={handleShare}
               className={`h-8 w-8 md:w-auto md:px-3 rounded-full transition-all flex items-center justify-center ${

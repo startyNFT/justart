@@ -35,7 +35,7 @@ export async function fetchStargazeName(walletAddress: string): Promise<string |
 // Image size options
 export type ImageSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl' | 'full';
 
-// Transform Stargaze IPFS URLs to use fast IPFS gateway
+// Transform Stargaze IPFS URLs to use IPFS gateway
 function transformIpfsUrl(url: string): string {
   if (!url) return '';
 
@@ -51,8 +51,7 @@ function transformIpfsUrl(url: string): string {
   }
 
   if (ipfsHash) {
-    // Use Cloudflare's fast IPFS gateway
-    return `https://cf-ipfs.com/ipfs/${ipfsHash}`;
+    return `https://ipfs.io/ipfs/${ipfsHash}`;
   }
 
   return url;
@@ -280,14 +279,10 @@ export async function fetchNFTPage(
   offset: number = 0,
   limit: number = PAGE_SIZE
 ): Promise<{ nfts: NFT[]; total: number; hasMore: boolean }> {
-  // Check cache first
+  // Check cache first for non-first pages
   const cached = getCachedPage(walletAddress, offset);
-  if (cached && cached.length > 0) {
-    // Return cached data immediately, but we don't know total from cache
-    // so we'll need to fetch fresh for total count on first page
-    if (offset > 0) {
-      return { nfts: cached, total: 0, hasMore: true };
-    }
+  if (cached && cached.length > 0 && offset > 0) {
+    return { nfts: cached, total: 0, hasMore: true };
   }
 
   try {

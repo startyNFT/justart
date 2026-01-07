@@ -60,11 +60,11 @@ export function GalleryThumbnail({ nftIds, backgroundColor = '#f5f5f5', cachedTh
   // Use cached thumbnails if available
   const hasCachedThumbnails = cachedThumbnails && cachedThumbnails.length > 0;
 
-  // Get up to 12 NFT IDs to have more chances of finding images
+  // Get exactly the first 4 NFT IDs in user's order
   const nftIdsToFetch = useMemo(() => {
     if (hasCachedThumbnails) return []; // Don't fetch if we have cached thumbnails
     if (!nftIds || !Array.isArray(nftIds)) return [];
-    return nftIds.slice(0, 12).filter(nft => nft?.contract && nft?.token_id);
+    return nftIds.slice(0, 4).filter(nft => nft?.contract && nft?.token_id);
   }, [nftIds, hasCachedThumbnails]);
 
   useEffect(() => {
@@ -91,53 +91,48 @@ export function GalleryThumbnail({ nftIds, backgroundColor = '#f5f5f5', cachedTh
     let cancelled = false;
 
     async function fetchImages() {
-      const rawUrls: string[] = [];
-      let hasVideo = false;
-
-      // Fetch in small batches until we have 4 images
-      const BATCH_SIZE = 4;
-      for (let i = 0; i < nftIdsToFetch.length && rawUrls.length < 4; i += BATCH_SIZE) {
+      try {
+        // Fetch all first 4 NFTs at once, maintaining order
+        const nfts = await fetchNFTsById(nftIdsToFetch);
         if (cancelled) return;
 
-        const batch = nftIdsToFetch.slice(i, i + BATCH_SIZE);
-        try {
-          const nfts = await fetchNFTsById(batch);
-          if (cancelled) return;
+        // Map results to URLs in exact order
+        const rawUrls: string[] = [];
+        let videoCount = 0;
 
-          for (const nft of nfts) {
-            if (!nft) continue;
-            // Skip audio NFTs - they don't have useful thumbnails
-            if (nft.mediaType === 'audio') continue;
+        for (const nft of nfts) {
+          if (!nft) {
+            rawUrls.push(''); // Placeholder for missing NFT
+            continue;
+          }
+          const imageUrl = nft.thumbnail || nft.image || '';
+          rawUrls.push(imageUrl);
+          if (nft.mediaType === 'video') videoCount++;
+        }
 
-            const imageUrl = nft.thumbnail || nft.image;
-            if (imageUrl) {
-              rawUrls.push(imageUrl);
-              if (nft.mediaType === 'video') hasVideo = true;
-              if (rawUrls.length >= 4) break;
+        if (cancelled) return;
+
+        // Filter out empty URLs for display but keep order
+        const validUrls = rawUrls.filter(url => url);
+
+        // Convert to CDN URLs in parallel
+        if (validUrls.length > 0) {
+          try {
+            const cdnUrls = await Promise.all(validUrls.map(getCdnUrl));
+            if (!cancelled) {
+              setImages(cdnUrls);
+              setIsVideoOnly(validUrls.length === 1 && videoCount === 1);
+            }
+          } catch {
+            // Use raw URLs as fallback
+            if (!cancelled) {
+              setImages(validUrls);
+              setIsVideoOnly(validUrls.length === 1 && videoCount === 1);
             }
           }
-        } catch {
-          // Continue to next batch on error
         }
-      }
-
-      if (cancelled) return;
-
-      // Convert to CDN URLs in parallel
-      if (rawUrls.length > 0) {
-        try {
-          const cdnUrls = await Promise.all(rawUrls.map(getCdnUrl));
-          if (!cancelled) {
-            setImages(cdnUrls);
-            setIsVideoOnly(rawUrls.length === 1 && hasVideo);
-          }
-        } catch {
-          // Use raw URLs as fallback
-          if (!cancelled) {
-            setImages(rawUrls);
-            setIsVideoOnly(rawUrls.length === 1 && hasVideo);
-          }
-        }
+      } catch {
+        // Error fetching NFTs
       }
 
       if (!cancelled) setLoading(false);

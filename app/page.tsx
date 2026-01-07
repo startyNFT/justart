@@ -114,7 +114,7 @@ export default function Home() {
           const nft = await fetchNFTById(nftId.contract, nftId.token_id);
           if (nft && nft.image && nft.mediaType !== 'audio') {
             return {
-              imageUrl: nft.thumbnail || nft.image,
+              imageUrl: nft.image, // Full resolution for homepage
               name: nft.name,
               gallery,
               isVideo: nft.mediaType === 'video',

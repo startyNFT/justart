@@ -192,18 +192,33 @@ export default function EditGallery() {
 
       const layout = `${size}-${arrangement}`;
 
-      const { error } = await supabase
+      // Try with lock_layout first, fallback without if column doesn't exist
+      let error;
+      const updateData: Record<string, unknown> = {
+        name: name.trim(),
+        description: description.trim() || null,
+        background_color: backgroundColor,
+        layout,
+        nft_ids: nftIds,
+        show_info: showInfo,
+      };
+
+      // Try with lock_layout
+      const result = await supabase
         .from('galleries')
-        .update({
-          name: name.trim(),
-          description: description.trim() || null,
-          background_color: backgroundColor,
-          layout,
-          nft_ids: nftIds,
-          show_info: showInfo,
-          lock_layout: lockLayout,
-        })
+        .update({ ...updateData, lock_layout: lockLayout })
         .eq('id', gallery.id);
+
+      if (result.error?.message?.includes('lock_layout')) {
+        // Column doesn't exist, try without it
+        const fallbackResult = await supabase
+          .from('galleries')
+          .update(updateData)
+          .eq('id', gallery.id);
+        error = fallbackResult.error;
+      } else {
+        error = result.error;
+      }
 
       if (error) throw error;
 

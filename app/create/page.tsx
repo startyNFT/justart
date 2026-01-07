@@ -240,7 +240,8 @@ export default function CreateGallery() {
       const slug = generateSlug();
       const layout = `${size}-${arrangement}`;
 
-      const { error } = await supabase.from('galleries').insert({
+      // Try with lock_layout first, fallback without if column doesn't exist
+      const insertData: Record<string, unknown> = {
         user_id: userId,
         slug,
         name: name.trim(),
@@ -250,10 +251,16 @@ export default function CreateGallery() {
         nft_ids: nftIds,
         payment_tx_hash: txHash,
         show_info: showInfo,
-        lock_layout: lockLayout,
-      });
+      };
 
-      if (error) throw error;
+      let result = await supabase.from('galleries').insert({ ...insertData, lock_layout: lockLayout });
+
+      if (result.error?.message?.includes('lock_layout')) {
+        // Column doesn't exist, try without it
+        result = await supabase.from('galleries').insert(insertData);
+      }
+
+      if (result.error) throw result.error;
 
       router.push(`/g/${slug}`);
     } catch (error) {

@@ -288,10 +288,6 @@ export function PresentationView({
             )}
           </button>
 
-          {/* Counter */}
-          <p className="text-white/40 text-xs mt-3">
-            {currentIndex + 1} / {nfts.length}
-          </p>
         </div>
       </div>
     </div>

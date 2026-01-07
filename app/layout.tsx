@@ -8,7 +8,7 @@ import { MainWrapper } from '@/components/MainWrapper';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'Pure Art - NFT Gallery',
+  title: 'pureart - NFT Gallery',
   description: 'Create beautiful galleries of your NFTs',
 };
 

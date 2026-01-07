@@ -3,13 +3,15 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { ChevronLeft, ChevronRight, Pause, Play } from 'lucide-react';
 import type { NFT } from '@/lib/stargaze';
-import { getStargazeNFTUrl } from '@/lib/utils';
+import { getStargazeNFTUrl, isDarkColor } from '@/lib/utils';
 
 type PresentationViewProps = {
   nfts: NFT[];
   descriptions?: Record<string, string>;
   autoPlayDuration?: number;
   backgroundColor?: string;
+  hasBackgroundMusic?: boolean;
+  onVideoStateChange?: (isVideo: boolean) => void;
 };
 
 export function PresentationView({
@@ -17,11 +19,24 @@ export function PresentationView({
   descriptions = {},
   autoPlayDuration = 5000,
   backgroundColor = '#000000',
+  hasBackgroundMusic = false,
+  onVideoStateChange,
 }: PresentationViewProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(true);
   const [progress, setProgress] = useState(0);
   const [showControls, setShowControls] = useState(true);
+  const [videoDuration, setVideoDuration] = useState<number | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  // Determine text colors based on background
+  const isDark = isDarkColor(backgroundColor);
+  const textColor = isDark ? 'text-white' : 'text-neutral-900';
+  const textMuted = isDark ? 'text-white/80' : 'text-neutral-600';
+  const progressBg = isDark ? 'bg-white/30' : 'bg-black/20';
+  const progressFill = isDark ? 'bg-white' : 'bg-neutral-900';
+  const buttonBg = isDark ? 'bg-black/50 hover:bg-black/70 text-white' : 'bg-white/80 hover:bg-white text-neutral-900';
+  const navButtonBg = isDark ? 'bg-black/50 text-white hover:bg-black/70' : 'bg-white/80 text-neutral-900 hover:bg-white';
   const containerRef = useRef<HTMLDivElement>(null);
   const progressRef = useRef<number>(0);
   const lastTimeRef = useRef<number>(0);
@@ -31,6 +46,14 @@ export function PresentationView({
   const safeNfts = nfts || [];
   const hasNfts = safeNfts.length > 0;
   const currentNft = hasNfts ? safeNfts[currentIndex] : null;
+  const currentIsVideo = currentNft?.mediaType === 'video' && !!currentNft?.animationUrl;
+
+  // Notify parent when video state changes (for pausing background music)
+  useEffect(() => {
+    onVideoStateChange?.(currentIsVideo);
+    // Reset video duration when changing slides
+    setVideoDuration(null);
+  }, [currentIsVideo, currentIndex, onVideoStateChange]);
 
   // Navigate to next/prev
   const goToNext = useCallback(() => {
@@ -58,34 +81,68 @@ export function PresentationView({
   }, []);
 
   // Auto-advance timer
+  // For videos: wait for video to end (handled by onEnded event)
+  // For images: use autoPlayDuration
   useEffect(() => {
     if (!isPlaying || !hasNfts || safeNfts.length <= 1) return;
 
-    lastTimeRef.current = performance.now();
+    // For videos, we'll advance when the video ends via onEnded handler
+    // But we still show progress based on video duration if known
+    if (currentIsVideo && videoDuration) {
+      lastTimeRef.current = performance.now();
 
-    const animate = (currentTime: number) => {
-      const deltaTime = currentTime - lastTimeRef.current;
-      lastTimeRef.current = currentTime;
+      const animate = (currentTime: number) => {
+        const deltaTime = currentTime - lastTimeRef.current;
+        lastTimeRef.current = currentTime;
 
-      progressRef.current += deltaTime;
-      const newProgress = Math.min((progressRef.current / autoPlayDuration) * 100, 100);
-      setProgress(newProgress);
+        progressRef.current += deltaTime;
+        const durationMs = videoDuration * 1000;
+        const newProgress = Math.min((progressRef.current / durationMs) * 100, 100);
+        setProgress(newProgress);
 
-      if (progressRef.current >= autoPlayDuration) {
-        goToNext();
-      } else {
-        animationRef.current = requestAnimationFrame(animate);
-      }
-    };
+        // Don't auto-advance here - video onEnded will handle it
+        if (progressRef.current < durationMs) {
+          animationRef.current = requestAnimationFrame(animate);
+        }
+      };
 
-    animationRef.current = requestAnimationFrame(animate);
+      animationRef.current = requestAnimationFrame(animate);
 
-    return () => {
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
-      }
-    };
-  }, [isPlaying, currentIndex, autoPlayDuration, goToNext, hasNfts, safeNfts.length]);
+      return () => {
+        if (animationRef.current) {
+          cancelAnimationFrame(animationRef.current);
+        }
+      };
+    }
+
+    // For images or videos without known duration, use fixed autoPlayDuration
+    if (!currentIsVideo) {
+      lastTimeRef.current = performance.now();
+
+      const animate = (currentTime: number) => {
+        const deltaTime = currentTime - lastTimeRef.current;
+        lastTimeRef.current = currentTime;
+
+        progressRef.current += deltaTime;
+        const newProgress = Math.min((progressRef.current / autoPlayDuration) * 100, 100);
+        setProgress(newProgress);
+
+        if (progressRef.current >= autoPlayDuration) {
+          goToNext();
+        } else {
+          animationRef.current = requestAnimationFrame(animate);
+        }
+      };
+
+      animationRef.current = requestAnimationFrame(animate);
+
+      return () => {
+        if (animationRef.current) {
+          cancelAnimationFrame(animationRef.current);
+        }
+      };
+    }
+  }, [isPlaying, currentIndex, autoPlayDuration, goToNext, hasNfts, safeNfts.length, currentIsVideo, videoDuration]);
 
   // Keyboard navigation
   useEffect(() => {
@@ -187,10 +244,10 @@ export function PresentationView({
           <button
             key={index}
             onClick={() => goToIndex(index)}
-            className="flex-1 h-1 bg-white/30 rounded-full overflow-hidden cursor-pointer hover:bg-white/40 transition-colors"
+            className={`flex-1 h-1 ${progressBg} rounded-full overflow-hidden cursor-pointer transition-colors`}
           >
             <div
-              className="h-full bg-white rounded-full transition-all duration-100"
+              className={`h-full ${progressFill} rounded-full transition-all duration-100`}
               style={{
                 width:
                   index < currentIndex
@@ -213,7 +270,7 @@ export function PresentationView({
             showControls ? 'opacity-100' : 'opacity-0'
           }`}
         >
-          <div className="w-10 h-10 rounded-full bg-black/50 flex items-center justify-center text-white hover:bg-black/70 transition-colors">
+          <div className={`w-10 h-10 rounded-full ${navButtonBg} flex items-center justify-center transition-colors`}>
             <ChevronLeft size={24} />
           </div>
         </button>
@@ -222,13 +279,25 @@ export function PresentationView({
         <div className="w-full h-full flex items-center justify-center px-8 pt-16 pb-40">
           {isVideo ? (
             <video
+              ref={videoRef}
               key={currentNft.animationUrl}
               src={currentNft.animationUrl}
               className="max-w-full max-h-full object-contain rounded-lg"
               autoPlay
-              loop
-              muted
               playsInline
+              muted={!hasBackgroundMusic}
+              onLoadedMetadata={(e) => {
+                const video = e.currentTarget;
+                if (video.duration && isFinite(video.duration)) {
+                  setVideoDuration(video.duration);
+                }
+              }}
+              onEnded={() => {
+                // When video ends, advance to next slide
+                if (isPlaying && safeNfts.length > 1) {
+                  goToNext();
+                }
+              }}
             />
           ) : (
             <img
@@ -259,23 +328,27 @@ export function PresentationView({
             showControls ? 'opacity-100' : 'opacity-0'
           }`}
         >
-          <div className="w-10 h-10 rounded-full bg-black/50 flex items-center justify-center text-white hover:bg-black/70 transition-colors">
+          <div className={`w-10 h-10 rounded-full ${navButtonBg} flex items-center justify-center transition-colors`}>
             <ChevronRight size={24} />
           </div>
         </button>
       </div>
 
-      {/* Bottom info panel - always visible */}
-      <div className="absolute bottom-0 left-0 right-0 z-20 p-6 bg-gradient-to-t from-black/80 to-transparent">
+      {/* Bottom info panel - visible on hover/controls */}
+      <div
+        className={`absolute bottom-0 left-0 right-0 z-20 p-6 transition-opacity duration-300 ${
+          showControls ? 'opacity-100' : 'opacity-0'
+        }`}
+      >
         <div className="max-w-2xl mx-auto text-center">
           {/* Collection name */}
-          <h2 className="text-white text-xl font-medium mb-3">
+          <h2 className={`${textColor} text-xl font-medium mb-3 drop-shadow-sm`}>
             {currentNft.collection.name}
           </h2>
 
           {/* Custom description/comment if provided */}
           {currentDescription && (
-            <p className="text-white/80 text-base leading-relaxed mb-4 italic">
+            <p className={`${textMuted} text-base leading-relaxed mb-4 italic`}>
               "{currentDescription}"
             </p>
           )}
@@ -283,7 +356,7 @@ export function PresentationView({
           {/* Play/Pause button */}
           <button
             onClick={togglePlayPause}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/20 rounded-full text-white text-sm transition-colors"
+            className={`inline-flex items-center gap-2 px-4 py-2 ${buttonBg} rounded-full text-sm transition-colors`}
           >
             {isPlaying ? (
               <>

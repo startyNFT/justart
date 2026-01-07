@@ -1,7 +1,11 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.warn('Supabase environment variables not set. Database features will not work.');
+}
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
@@ -30,6 +34,7 @@ export type Gallery = {
   views: number;
   show_info: boolean;
   lock_layout: boolean; // If true, viewers cannot change size/arrangement
+  music_track: string | null; // ID of curated music track to play
   created_at: string;
 };
 

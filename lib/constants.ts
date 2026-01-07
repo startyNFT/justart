@@ -37,3 +37,10 @@ export const LAYOUT_OPTIONS = [
 ] as const;
 
 export type LayoutType = typeof LAYOUT_OPTIONS[number]['id'];
+
+// Music track type for NFT audio/video
+export type MusicTrack = {
+  url: string;
+  name: string;
+  collection: string;
+};

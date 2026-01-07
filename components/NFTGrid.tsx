@@ -15,7 +15,8 @@ type NFTGridProps = {
   selectable?: boolean;
   selectedIds?: Set<string>;
   onSelect?: (nft: NFT) => void;
-  useThumbnails?: boolean;
+  useThumbnails?: boolean; // Force thumbnails even for large sizes (e.g., selection mode)
+  highRes?: boolean; // Use full resolution images (for gallery display)
 };
 
 const gridSizeClasses: Record<SizeType, string> = {
@@ -31,9 +32,9 @@ const sizeColumnCounts: Record<SizeType, number> = {
 };
 
 const justifiedRowHeights: Record<SizeType, number> = {
-  small: 120,
-  medium: 180,
-  large: 280,
+  small: 180,
+  medium: 280,
+  large: 400,
 };
 
 // Simple card with natural aspect ratio for vertical/masonry layout
@@ -42,12 +43,17 @@ const SimpleCard = memo(function SimpleCard({
   selected,
   onSelect,
   selectable,
+  highRes,
 }: {
   nft: NFT;
   selected?: boolean;
   onSelect?: () => void;
   selectable?: boolean;
+  highRes?: boolean;
 }) {
+  const [videoPlaying, setVideoPlaying] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+
   const handleClick = useCallback(() => {
     if (selectable && onSelect) {
       onSelect();
@@ -55,6 +61,20 @@ const SimpleCard = memo(function SimpleCard({
       window.open(getStargazeNFTUrl(nft.collection.contractAddress, nft.tokenId), '_blank');
     }
   }, [nft.collection.contractAddress, nft.tokenId, selectable, onSelect]);
+
+  const handleVideoToggle = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!videoRef.current) return;
+    if (videoPlaying) {
+      videoRef.current.pause();
+      setVideoPlaying(false);
+    } else {
+      videoRef.current.play();
+      setVideoPlaying(true);
+    }
+  }, [videoPlaying]);
+
+  const isVideo = nft.mediaType === 'video' && nft.animationUrl;
 
   return (
     <div
@@ -68,14 +88,44 @@ const SimpleCard = memo(function SimpleCard({
         breakInside: 'avoid',
       }}
     >
-      <img
-        src={nft.thumbnail || nft.image}
-        alt=""
-        className="w-full h-auto"
-        draggable={false}
-        decoding="async"
-        loading="lazy"
-      />
+      {isVideo ? (
+        <>
+          <video
+            ref={videoRef}
+            src={nft.animationUrl}
+            className="w-full h-auto"
+            loop
+            muted
+            playsInline
+            preload="metadata"
+          />
+          <button
+            onClick={handleVideoToggle}
+            className={`absolute bottom-2 right-2 w-10 h-10 bg-black/70 rounded-full flex items-center justify-center transition-opacity ${
+              videoPlaying ? 'opacity-100' : 'opacity-80 hover:opacity-100'
+            }`}
+          >
+            {videoPlaying ? (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+            ) : (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><polygon points="5,3 19,12 5,21"/></svg>
+            )}
+          </button>
+        </>
+      ) : (nft.thumbnail || nft.image) ? (
+        <img
+          src={highRes ? nft.image : (nft.thumbnail || nft.image)}
+          alt=""
+          className="w-full h-auto"
+          draggable={false}
+          decoding="async"
+          loading="lazy"
+        />
+      ) : (
+        <div className="w-full aspect-square flex items-center justify-center text-neutral-300 text-xs">
+          No Image
+        </div>
+      )}
       {selectable && selected && (
         <div className="absolute top-2 right-2 w-5 h-5 bg-neutral-900 rounded-full flex items-center justify-center">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3">
@@ -95,6 +145,7 @@ const JustifiedItem = memo(function JustifiedItem({
   selected,
   onSelect,
   selectable,
+  highRes,
 }: {
   nft: NFT;
   width: number;
@@ -102,7 +153,11 @@ const JustifiedItem = memo(function JustifiedItem({
   selected?: boolean;
   onSelect?: () => void;
   selectable?: boolean;
+  highRes?: boolean;
 }) {
+  const [videoPlaying, setVideoPlaying] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+
   const handleClick = useCallback(() => {
     if (selectable && onSelect) {
       onSelect();
@@ -110,6 +165,20 @@ const JustifiedItem = memo(function JustifiedItem({
       window.open(getStargazeNFTUrl(nft.collection.contractAddress, nft.tokenId), '_blank');
     }
   }, [nft.collection.contractAddress, nft.tokenId, selectable, onSelect]);
+
+  const handleVideoToggle = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!videoRef.current) return;
+    if (videoPlaying) {
+      videoRef.current.pause();
+      setVideoPlaying(false);
+    } else {
+      videoRef.current.play();
+      setVideoPlaying(true);
+    }
+  }, [videoPlaying]);
+
+  const isVideo = nft.mediaType === 'video' && nft.animationUrl;
 
   return (
     <div
@@ -125,14 +194,44 @@ const JustifiedItem = memo(function JustifiedItem({
         selected ? 'ring-2 ring-neutral-900 ring-offset-2' : ''
       }`}
     >
-      <img
-        src={nft.thumbnail || nft.image}
-        alt=""
-        className="w-full h-full object-cover"
-        draggable={false}
-        decoding="async"
-        loading="lazy"
-      />
+      {isVideo ? (
+        <>
+          <video
+            ref={videoRef}
+            src={nft.animationUrl}
+            className="w-full h-full object-cover"
+            loop
+            muted
+            playsInline
+            preload="metadata"
+          />
+          <button
+            onClick={handleVideoToggle}
+            className={`absolute bottom-2 right-2 w-10 h-10 bg-black/70 rounded-full flex items-center justify-center transition-opacity ${
+              videoPlaying ? 'opacity-100' : 'opacity-80 hover:opacity-100'
+            }`}
+          >
+            {videoPlaying ? (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+            ) : (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><polygon points="5,3 19,12 5,21"/></svg>
+            )}
+          </button>
+        </>
+      ) : (nft.thumbnail || nft.image) ? (
+        <img
+          src={highRes ? nft.image : (nft.thumbnail || nft.image)}
+          alt=""
+          className="w-full h-full object-cover"
+          draggable={false}
+          decoding="async"
+          loading="lazy"
+        />
+      ) : (
+        <div className="w-full h-full flex items-center justify-center text-neutral-300 text-xs">
+          No Image
+        </div>
+      )}
       {selectable && selected && (
         <div className="absolute top-2 right-2 w-5 h-5 bg-neutral-900 rounded-full flex items-center justify-center">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3">
@@ -211,6 +310,7 @@ export function NFTGrid({
   selectable,
   selectedIds,
   onSelect,
+  highRes,
 }: NFTGridProps) {
   // Legacy support
   if (layout && !arrangement) {
@@ -264,6 +364,7 @@ export function NFTGrid({
             selectable={selectable}
             selected={isSelected(nft)}
             onSelect={() => onSelect?.(nft)}
+            highRes={highRes}
           />
         ))}
       </div>
@@ -289,6 +390,7 @@ export function NFTGrid({
             selectable={selectable}
             selected={isSelected(nft)}
             onSelect={() => onSelect?.(nft)}
+            highRes={highRes}
           />
         ))}
       </div>
@@ -319,6 +421,7 @@ export function NFTGrid({
                 selectable={selectable}
                 selected={isSelected(nft)}
                 onSelect={() => onSelect?.(nft)}
+                highRes={highRes}
               />
             ))}
           </div>

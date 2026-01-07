@@ -1,27 +1,34 @@
 'use client';
 
-import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useChain } from '@cosmos-kit/react';
 import { NFTGrid } from '@/components/NFTGrid';
+import { ConnectWalletButton } from '@/components/ConnectWalletButton';
 import { SizePicker, ArrangementPicker } from '@/components/LayoutPicker';
 import { fetchNFTPage, PAGE_SIZE, type NFT } from '@/lib/stargaze';
 import type { SizeType, ArrangementType } from '@/lib/constants';
 import { Wallet, Loader2, ChevronLeft, ChevronRight, Layers } from 'lucide-react';
 
-const ITEMS_PER_PAGE = PAGE_SIZE; // Use larger batch for faster loading
+const ITEMS_PER_PAGE = PAGE_SIZE;
 
 export default function MyNFTs() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { address, isWalletConnected, openView } = useChain('stargaze');
+  const { address, isWalletConnected } = useChain('stargaze');
   const [nfts, setNfts] = useState<NFT[]>([]);
   const [loading, setLoading] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [total, setTotal] = useState(0);
   const [size, setSize] = useState<SizeType>('medium');
   const [arrangement, setArrangement] = useState<ArrangementType>('grid');
-  const [hideDuplicates, setHideDuplicates] = useState(true); // Default to hiding duplicates
+  const [hideDuplicates, setHideDuplicates] = useState(true);
+
+  // Background loading state
+  const [loadingProgress, setLoadingProgress] = useState({ loaded: 0, total: 0 });
+  const [initialProgress, setInitialProgress] = useState(0);
+  const backgroundLoadingRef = useRef(false);
+  const initialProgressRef = useRef<NodeJS.Timeout | null>(null);
 
   // Get page from URL, default to 1
   const currentPage = Number(searchParams.get('page')) || 1;
@@ -32,13 +39,105 @@ export default function MyNFTs() {
     setMounted(true);
   }, []);
 
+  // Animate progress: 0-75% over 5 seconds, then smooth random increments up to 99%
+  useEffect(() => {
+    if (!loading) return;
+
+    const startTime = Date.now();
+    const duration = 5000; // 5 seconds to reach 75%
+    let currentProgress = 0;
+
+    const animate = () => {
+      const elapsed = Date.now() - startTime;
+
+      if (elapsed < duration) {
+        // Phase 1: 0-75% over 5 seconds (smooth)
+        currentProgress = (elapsed / duration) * 75;
+      } else if (currentProgress < 99) {
+        // Phase 2: smooth random increments toward 99%
+        // Smaller increments as we get closer to 99%
+        const remaining = 99 - currentProgress;
+        const increment = Math.random() * Math.min(0.5, remaining * 0.1) + 0.05;
+        currentProgress = Math.min(currentProgress + increment, 99);
+      }
+
+      setInitialProgress(currentProgress);
+
+      if (currentProgress < 99 && loading) {
+        // Random interval between 50-150ms for organic feel
+        const nextInterval = 50 + Math.random() * 100;
+        initialProgressRef.current = setTimeout(animate, nextInterval);
+      }
+    };
+
+    animate();
+
+    return () => {
+      if (initialProgressRef.current) {
+        clearTimeout(initialProgressRef.current);
+      }
+    };
+  }, [loading]);
+
+  // Background load all pages for faster navigation
+  const backgroundLoadAllPages = useCallback(async (walletAddress: string, totalCount: number) => {
+    if (backgroundLoadingRef.current) return;
+    backgroundLoadingRef.current = true;
+
+    const pagesToLoad = Math.ceil(totalCount / PAGE_SIZE);
+    const CONCURRENT_REQUESTS = 6;
+
+    // Generate all page offsets (skip first page, already loaded)
+    const offsets: number[] = [];
+    for (let page = 2; page <= pagesToLoad; page++) {
+      offsets.push((page - 1) * PAGE_SIZE);
+    }
+
+    let loadedCount = PAGE_SIZE; // First page already loaded
+
+    // Fetch in parallel batches
+    for (let i = 0; i < offsets.length; i += CONCURRENT_REQUESTS) {
+      const batch = offsets.slice(i, i + CONCURRENT_REQUESTS);
+      setLoadingProgress({ loaded: loadedCount, total: totalCount });
+
+      await Promise.all(
+        batch.map(offset => fetchNFTPage(walletAddress, offset, PAGE_SIZE))
+      );
+
+      loadedCount += batch.length * PAGE_SIZE;
+    }
+
+    setLoadingProgress({ loaded: totalCount, total: totalCount });
+    // Brief delay to show 100% before hiding
+    await new Promise(resolve => setTimeout(resolve, 300));
+    setLoadingProgress({ loaded: 0, total: 0 });
+  }, []);
+
   // Load page
   useEffect(() => {
     if (!address) return;
 
     async function loadPage(retryCount = 0) {
-      setLoading(true);
       const offset = (currentPage - 1) * ITEMS_PER_PAGE;
+
+      // For non-first pages, check cache first (instant load, no progress bar)
+      if (currentPage > 1) {
+        const cachedKey = `pureart_nfts_page_${address}_${offset}`;
+        try {
+          const cached = localStorage.getItem(cachedKey);
+          if (cached) {
+            const { data, timestamp } = JSON.parse(cached);
+            if (Date.now() - timestamp < 5 * 60 * 1000 && data.length > 0) {
+              setNfts(data);
+              return; // Instant load from cache, no progress bar needed
+            }
+          }
+        } catch { /* ignore cache errors */ }
+      }
+
+      // No cache hit - show loading progress bar
+      setInitialProgress(0);
+      setLoading(true);
 
       const result = await fetchNFTPage(address!, offset, ITEMS_PER_PAGE);
 
@@ -50,16 +149,26 @@ export default function MyNFTs() {
       }
 
       setNfts(result.nfts);
-      setTotal(result.total);
+      if (result.total > 0) {
+        setTotal(result.total);
+      }
+
+      // Complete progress bar to 100%, then hide
+      setInitialProgress(100);
+      await new Promise(resolve => setTimeout(resolve, 200));
       setLoading(false);
+
+      // Start background loading silently
+      if (currentPage === 1 && result.total > PAGE_SIZE && !backgroundLoadingRef.current) {
+        backgroundLoadAllPages(address!, result.total);
+      }
     }
 
     loadPage();
-  }, [address, currentPage]);
+  }, [address, currentPage, backgroundLoadAllPages]);
 
   const goToPage = useCallback((page: number) => {
     if (page >= 1 && page <= totalPages) {
-      setNfts([]); // Clear immediately so user knows page is changing
       router.push(page === 1 ? '/my-nfts' : `/my-nfts?page=${page}`, { scroll: false });
       window.scrollTo({ top: 0, behavior: 'instant' });
     }
@@ -124,19 +233,26 @@ export default function MyNFTs() {
       <div className="max-w-7xl mx-auto px-4 py-20 text-center">
         <Wallet size={48} className="mx-auto text-neutral-300 mb-4" strokeWidth={1} />
         <p className="text-neutral-400 mb-4">Connect your wallet to see your NFTs</p>
-        <button
-          onClick={() => openView()}
-          className="px-4 py-2 bg-neutral-900 text-white rounded-lg hover:bg-neutral-800 transition-colors"
-        >
-          Connect Wallet
-        </button>
+        <ConnectWalletButton />
       </div>
     );
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-8">
-      <div className="flex items-center justify-between mb-6">
+    <div className="max-w-7xl mx-auto px-3 md:px-4 py-4 md:py-8">
+      {/* Loading progress bar - only shows during current page load */}
+      {loading && (
+        <div className="mb-4">
+          <div className="h-1 bg-neutral-200 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-neutral-900 rounded-full transition-all duration-150 ease-out"
+              style={{ width: `${initialProgress}%` }}
+            />
+          </div>
+        </div>
+      )}
+
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
         <div className="flex items-center gap-3">
           <p className="text-sm text-neutral-400">
             {total > 0
@@ -149,10 +265,10 @@ export default function MyNFTs() {
             <Loader2 size={14} className="text-neutral-400 animate-spin" />
           )}
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 overflow-x-auto">
           <button
             onClick={() => setHideDuplicates(!hideDuplicates)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors flex-shrink-0 ${
               hideDuplicates
                 ? 'bg-neutral-900 text-white'
                 : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'

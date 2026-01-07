@@ -9,11 +9,11 @@ type NFTCardProps = {
   selected?: boolean;
   onSelect?: () => void;
   selectable?: boolean;
-  useThumbnail?: boolean;
+  highRes?: boolean; // Use full resolution image instead of thumbnail
 };
 
 // Optimized card with video support (no autoplay for performance)
-export const NFTCard = memo(function NFTCard({ nft, selected, onSelect, selectable }: NFTCardProps) {
+export const NFTCard = memo(function NFTCard({ nft, selected, onSelect, selectable, highRes }: NFTCardProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [videoPlaying, setVideoPlaying] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -93,7 +93,7 @@ export const NFTCard = memo(function NFTCard({ nft, selected, onSelect, selectab
         </>
       ) : (nft.thumbnail || nft.image) ? (
         <img
-          src={nft.thumbnail || nft.image}
+          src={highRes ? nft.image : (nft.thumbnail || nft.image)}
           alt=""
           className="absolute inset-0 w-full h-full object-cover"
           draggable={false}

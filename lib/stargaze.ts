@@ -79,37 +79,12 @@ export type NFT = {
   };
 };
 
-const TOKENS_QUERY = gql`
-  query TokensOwned($owner: String!, $limit: Int, $offset: Int) {
-    tokens(ownerAddrOrName: $owner, limit: $limit, offset: $offset) {
-      tokens {
-        tokenId
-        name
-        description
-        media {
-          url
-          type
-        }
-        metadata
-        collection {
-          contractAddress
-          name
-        }
-      }
-      pageInfo {
-        total
-        offset
-        limit
-      }
-    }
-  }
-`;
 
 // Helper to map token data to NFT type
 function mapTokenToNFT(token: {
   tokenId: string;
   name: string;
-  description: string;
+  description?: string;
   media: {
     url: string;
     type: string;
@@ -168,18 +143,36 @@ function mapTokenToNFT(token: {
     imageUrl = token.metadata.image_data as string;
   }
 
+  // Check if this is an animated image (GIF, APNG, animated WebP)
+  const lowerImageUrl = imageUrl.toLowerCase();
+  const lowerMediaType = rawMediaType.toLowerCase();
+  const isAnimatedImage =
+    lowerImageUrl.includes('.gif') ||
+    lowerMediaType.includes('gif') ||
+    lowerImageUrl.includes('.apng') ||
+    lowerMediaType.includes('apng') ||
+    // Check if animation_url is a GIF (not video)
+    (animationUrl && (animationUrl.toLowerCase().includes('.gif') || animationUrl.toLowerCase().includes('.apng')));
+
   // Get optimized thumbnail from visualAssets (use medium size - 512px)
-  // Skip thumbnail for GIFs to preserve animation
-  const isGif = imageUrl.toLowerCase().includes('.gif') || rawMediaType.includes('gif');
-  const thumbnail = isGif ? undefined : (token.media?.visualAssets?.md?.url || token.media?.visualAssets?.lg?.url);
+  // Skip thumbnail for animated images to preserve animation
+  // Skip thumbnail for audio NFTs - visualAssets would be audio waveform, not cover art
+  const skipThumbnail = isAnimatedImage || isNonImageMedia;
+  const thumbnail = skipThumbnail ? undefined : (token.media?.visualAssets?.md?.url || token.media?.visualAssets?.lg?.url);
+
+  // For GIF animation_url, use it as the image instead
+  let finalImageUrl = imageUrl;
+  if (animationUrl && (animationUrl.toLowerCase().includes('.gif') || animationUrl.toLowerCase().includes('.apng'))) {
+    finalImageUrl = animationUrl;
+  }
 
   return {
     tokenId: token.tokenId,
     name: token.name || `#${token.tokenId}`,
     description: token.description || '',
-    image: imageUrl.startsWith('data:') ? imageUrl : transformIpfsUrl(imageUrl),
+    image: finalImageUrl.startsWith('data:') ? finalImageUrl : transformIpfsUrl(finalImageUrl),
     thumbnail: thumbnail || undefined,
-    animationUrl: videoUrl ? transformIpfsUrl(videoUrl) : (animationUrl ? transformIpfsUrl(animationUrl) : undefined),
+    animationUrl: videoUrl ? transformIpfsUrl(videoUrl) : (animationUrl && !animationUrl.toLowerCase().includes('.gif') && !animationUrl.toLowerCase().includes('.apng') ? transformIpfsUrl(animationUrl) : undefined),
     audioUrl: audioUrl ? transformIpfsUrl(audioUrl) : undefined,
     mediaType,
     collection: token.collection,
@@ -218,7 +211,7 @@ function setCachedPage(walletAddress: string, offset: number, data: NFT[]) {
   }
 }
 
-export const PAGE_SIZE = 100; // Larger batches for faster loading
+export const PAGE_SIZE = 75; // NFTs per page
 
 const nftQuery = `
   query TokensOwned($owner: String!, $limit: Int, $offset: Int) {
@@ -496,17 +489,33 @@ export async function fetchNFTById(
       imageUrl = data.token.metadata.image_data as string;
     }
 
-    // Get optimized thumbnail from visualAssets - use small for faster loading (skip for GIFs to preserve animation)
-    const isGif = imageUrl.toLowerCase().includes('.gif') || rawMediaType.includes('gif');
-    const thumbnail = isGif ? undefined : (data.token.media?.visualAssets?.sm?.url || data.token.media?.visualAssets?.md?.url);
+    // Check if this is an animated image (GIF, APNG, animated WebP)
+    const lowerImageUrl = imageUrl.toLowerCase();
+    const lowerMediaType = rawMediaType.toLowerCase();
+    const isAnimatedImage =
+      lowerImageUrl.includes('.gif') ||
+      lowerMediaType.includes('gif') ||
+      lowerImageUrl.includes('.apng') ||
+      lowerMediaType.includes('apng') ||
+      (animationUrl && (animationUrl.toLowerCase().includes('.gif') || animationUrl.toLowerCase().includes('.apng')));
+
+    // Get optimized thumbnail from visualAssets - skip for animated images and audio NFTs
+    const skipThumbnail = isAnimatedImage || isNonImageMedia;
+    const thumbnail = skipThumbnail ? undefined : (data.token.media?.visualAssets?.sm?.url || data.token.media?.visualAssets?.md?.url);
+
+    // For GIF animation_url, use it as the image instead
+    let finalImageUrl = imageUrl;
+    if (animationUrl && (animationUrl.toLowerCase().includes('.gif') || animationUrl.toLowerCase().includes('.apng'))) {
+      finalImageUrl = animationUrl;
+    }
 
     const nft: NFT = {
       tokenId: data.token.tokenId,
       name: data.token.name || `#${data.token.tokenId}`,
       description: data.token.description || '',
-      image: imageUrl.startsWith('data:') ? imageUrl : transformIpfsUrl(imageUrl),
+      image: finalImageUrl.startsWith('data:') ? finalImageUrl : transformIpfsUrl(finalImageUrl),
       thumbnail: thumbnail || undefined,
-      animationUrl: videoUrl ? transformIpfsUrl(videoUrl) : (animationUrl ? transformIpfsUrl(animationUrl) : undefined),
+      animationUrl: videoUrl ? transformIpfsUrl(videoUrl) : (animationUrl && !animationUrl.toLowerCase().includes('.gif') && !animationUrl.toLowerCase().includes('.apng') ? transformIpfsUrl(animationUrl) : undefined),
       audioUrl: audioUrl ? transformIpfsUrl(audioUrl) : undefined,
       mediaType,
       collection: data.token.collection,

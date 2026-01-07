@@ -3,7 +3,7 @@
 import { ChainProvider } from '@cosmos-kit/react';
 import { wallets as keplrWallets } from '@cosmos-kit/keplr';
 import { wallets as leapWallets } from '@cosmos-kit/leap';
-import { ReactNode } from 'react';
+import { ReactNode, useState, useEffect } from 'react';
 import type { Chain, AssetList } from '@chain-registry/types';
 
 const stargazeChain = {

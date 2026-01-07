@@ -1,24 +1,24 @@
 'use client';
 
-import { useChain, useChainWallet } from '@cosmos-kit/react';
-import { User, LogOut, X } from 'lucide-react';
-import { truncateAddress } from '@/lib/utils';
-import { useState, useRef, useEffect } from 'react';
+import { useChainWallet } from '@cosmos-kit/react';
+import { X } from 'lucide-react';
+import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 
-export function WalletButton() {
-  const { address, disconnect, isWalletConnected } = useChain('stargaze');
+type Props = {
+  className?: string;
+  children?: React.ReactNode;
+};
+
+export function ConnectWalletButton({ className, children }: Props) {
   const keplrWallet = useChainWallet('stargaze', 'keplr-extension', false);
   const leapWallet = useChainWallet('stargaze', 'leap-extension', false);
 
-  const [showMenu, setShowMenu] = useState(false);
   const [showWalletPicker, setShowWalletPicker] = useState(false);
   const [connecting, setConnecting] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
   const [failedWallets, setFailedWallets] = useState<Set<string>>(new Set());
-  const menuRef = useRef<HTMLDivElement>(null);
 
-  // Get logos from wallet info
   const keplrLogo = keplrWallet.wallet?.logo;
   const leapLogo = leapWallet.wallet?.logo;
 
@@ -31,24 +31,16 @@ export function WalletButton() {
   }, []);
 
   useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setShowMenu(false);
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  useEffect(() => {
     function handleEscape(event: KeyboardEvent) {
       if (event.key === 'Escape') {
         setShowWalletPicker(false);
       }
     }
-    document.addEventListener('keydown', handleEscape);
-    return () => document.removeEventListener('keydown', handleEscape);
-  }, []);
+    if (showWalletPicker) {
+      document.addEventListener('keydown', handleEscape);
+      return () => document.removeEventListener('keydown', handleEscape);
+    }
+  }, [showWalletPicker]);
 
   const handleConnect = async (walletType: 'keplr' | 'leap') => {
     setConnecting(walletType);
@@ -61,7 +53,6 @@ export function WalletButton() {
       setShowWalletPicker(false);
     } catch (error) {
       console.error('Failed to connect:', error);
-      // Mark wallet as failed
       setFailedWallets(prev => new Set(prev).add(walletType));
     } finally {
       setConnecting(null);
@@ -74,19 +65,15 @@ export function WalletButton() {
 
   const modal = showWalletPicker && mounted ? createPortal(
     <div className="fixed inset-0 z-[9999]">
-      {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/50 backdrop-blur-sm"
         onClick={closeModal}
       />
-
-      {/* Modal */}
       <div className="absolute inset-0 flex items-center justify-center p-4">
         <div
           className="bg-white rounded-2xl shadow-2xl w-full max-w-sm"
           onClick={(e) => e.stopPropagation()}
         >
-          {/* Header */}
           <div className="flex items-center justify-between p-4 border-b border-neutral-100">
             <h2 className="text-lg font-medium text-neutral-900">Connect Wallet</h2>
             <button
@@ -96,8 +83,6 @@ export function WalletButton() {
               <X size={20} />
             </button>
           </div>
-
-          {/* Wallet Options */}
           <div className="p-4 space-y-3">
             <button
               onClick={() => handleConnect('keplr')}
@@ -125,7 +110,6 @@ export function WalletButton() {
                 <div className="ml-auto w-5 h-5 border-2 border-neutral-300 border-t-neutral-600 rounded-full animate-spin" />
               )}
             </button>
-
             <button
               onClick={() => handleConnect('leap')}
               disabled={connecting !== null || !leapAvailable}
@@ -159,48 +143,15 @@ export function WalletButton() {
     document.body
   ) : null;
 
-  if (!isWalletConnected) {
-    return (
-      <>
-        <button
-          onClick={() => setShowWalletPicker(true)}
-          className="p-2 rounded-lg text-neutral-400 hover:text-neutral-600 hover:bg-neutral-50 transition-colors"
-          title="Connect Wallet"
-        >
-          <User size={20} strokeWidth={1.5} />
-        </button>
-        {modal}
-      </>
-    );
-  }
-
   return (
-    <div className="relative" ref={menuRef}>
+    <>
       <button
-        onClick={() => setShowMenu(!showMenu)}
-        className="p-2 rounded-lg bg-neutral-100 text-neutral-900 transition-colors"
-        title={address}
+        onClick={() => setShowWalletPicker(true)}
+        className={className || "px-4 py-2 bg-neutral-900 text-white rounded-lg hover:bg-neutral-800 transition-colors"}
       >
-        <User size={20} strokeWidth={1.5} />
+        {children || 'Connect Wallet'}
       </button>
-
-      {showMenu && (
-        <div className="absolute right-0 top-full mt-2 bg-white rounded-lg shadow-lg border border-neutral-100 py-1 min-w-[180px] z-50">
-          <div className="px-3 py-2 text-sm text-neutral-500 border-b border-neutral-100">
-            {truncateAddress(address || '')}
-          </div>
-          <button
-            onClick={() => {
-              disconnect();
-              setShowMenu(false);
-            }}
-            className="w-full px-3 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-50 flex items-center gap-2"
-          >
-            <LogOut size={16} />
-            Disconnect
-          </button>
-        </div>
-      )}
-    </div>
+      {modal}
+    </>
   );
 }

@@ -6,10 +6,11 @@ import { useChain } from '@cosmos-kit/react';
 import { NFTGrid } from '@/components/NFTGrid';
 import { PresentationView } from '@/components/PresentationView';
 import { SizePicker, ArrangementPicker } from '@/components/LayoutPicker';
+import { AudioPlayer } from '@/components/AudioPlayer';
 import { supabase, type Gallery, type NFTItem } from '@/lib/supabase';
 import { fetchNFTById, fetchStargazeName, type NFT } from '@/lib/stargaze';
 import { formatNumber, isDarkColor } from '@/lib/utils';
-import type { SizeType, ArrangementType } from '@/lib/constants';
+import type { SizeType, ArrangementType, MusicTrack } from '@/lib/constants';
 import { Eye, Heart, Share2, Loader2, Pencil, Home, Image, LayoutGrid, Plus, Lock } from 'lucide-react';
 import Link from 'next/link';
 
@@ -32,6 +33,7 @@ export default function GalleryView() {
   const [ownerName, setOwnerName] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [lockLayout, setLockLayout] = useState(false);
+  const [isShowingVideo, setIsShowingVideo] = useState(false);
 
   const isDark = gallery ? isDarkColor(gallery.background_color) : false;
   const textColor = isDark ? 'text-white' : 'text-neutral-900';
@@ -191,38 +193,38 @@ export default function GalleryView() {
       <div
         className={`
           fixed top-0 left-0 right-0 z-50
-          flex items-center justify-between gap-4 px-4 py-3
+          flex items-center justify-between gap-2 md:gap-4 px-3 md:px-4 py-2 md:py-3
           ${bgPanel} border-b ${borderColor}
           group
         `}
       >
         {/* Left side - Home always visible, info based on setting */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 md:gap-3 min-w-0">
           {/* Home icon - always visible */}
-          <Link href="/" className={`p-1.5 rounded-full hover:bg-black/10 ${textMuted}`} title="Home">
+          <Link href="/" className={`p-1.5 rounded-full hover:bg-black/10 ${textMuted} flex-shrink-0`} title="Home">
             <Home size={18} />
           </Link>
 
           {/* Gallery info - visible based on show_info setting OR on hover */}
           <div className={`
-            flex items-center gap-3
+            flex items-center gap-2 md:gap-3 min-w-0
             ${showInfoByDefault ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}
             transition-opacity duration-500
           `}>
-            <div className={`w-px h-5 ${isDark ? 'bg-white/20' : 'bg-black/10'}`} />
-            <div className="flex items-center gap-2">
-              <span className={`text-sm font-medium ${textColor} max-w-[300px] truncate`}>
+            <div className={`w-px h-5 hidden md:block ${isDark ? 'bg-white/20' : 'bg-black/10'}`} />
+            <div className="flex items-center gap-2 min-w-0">
+              <span className={`text-sm font-medium ${textColor} truncate max-w-[120px] md:max-w-[300px]`}>
                 {gallery.name}
               </span>
               {ownerName && (
-                <span className={`text-xs ${textMuted}`}>by {ownerName}</span>
+                <span className={`text-xs ${textMuted} hidden md:inline`}>by {ownerName}</span>
               )}
             </div>
-            <div className={`w-px h-5 ${isDark ? 'bg-white/20' : 'bg-black/10'}`} />
-            <div className={`flex items-center gap-3 text-sm ${textMuted}`}>
+            <div className={`w-px h-5 hidden md:block ${isDark ? 'bg-white/20' : 'bg-black/10'}`} />
+            <div className={`flex items-center gap-2 md:gap-3 text-sm ${textMuted}`}>
               <span className="flex items-center gap-1">
                 <Eye size={14} />
-                {formatNumber(gallery.views + 1)}
+                <span className="hidden sm:inline">{formatNumber(gallery.views + 1)}</span>
               </span>
               <button
                 onClick={handleLike}
@@ -230,24 +232,20 @@ export default function GalleryView() {
                 className={`flex items-center gap-1 transition-colors ${hasLiked ? 'text-red-500' : ''} disabled:opacity-50`}
               >
                 <Heart size={14} fill={hasLiked ? 'currentColor' : 'none'} />
-                {formatNumber(likesCount)}
+                <span className="hidden sm:inline">{formatNumber(likesCount)}</span>
               </button>
             </div>
           </div>
         </div>
 
-        {/* Right side - All hover only */}
-        <div className={`
-          flex items-center gap-2
-          opacity-0 group-hover:opacity-100
-          transition-opacity duration-500
-        `}>
-          {/* Navigation */}
-          <div className={`flex items-center gap-1 px-2 py-1 rounded-lg ${
-            isDark
-              ? 'bg-white/15 ring-1 ring-white/30'
-              : 'bg-black/10 ring-1 ring-black/15'
-          }`}>
+        {/* Right side - Essential actions always visible on mobile, rest on hover */}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {/* Desktop-only: Navigation links */}
+          <div className={`
+            hidden lg:flex items-center gap-1 px-2 py-1 rounded-lg
+            opacity-0 group-hover:opacity-100 transition-opacity duration-500
+            ${isDark ? 'bg-white/15 ring-1 ring-white/30' : 'bg-black/10 ring-1 ring-black/15'}
+          `}>
             <Link href="/my-nfts" className={`p-1.5 rounded-full hover:bg-black/10 ${textMuted}`} title="My NFTs">
               <Image size={18} />
             </Link>
@@ -259,29 +257,32 @@ export default function GalleryView() {
             </Link>
           </div>
 
-          <div className={`w-px h-5 mx-4 ${isDark ? 'bg-white/30' : 'bg-black/20'}`} />
+          <div className={`w-px h-5 mx-2 md:mx-4 hidden md:block opacity-0 group-hover:opacity-100 transition-opacity duration-500 ${isDark ? 'bg-white/30' : 'bg-black/20'}`} />
 
-          {/* Layout controls - hidden if locked */}
+          {/* Layout controls - hidden if locked, hover-only on desktop, always visible on mobile */}
           {lockLayout ? (
-            <div className={`flex items-center gap-1 px-2 py-1 rounded-lg ${textMuted}`} title="Layout locked by owner">
+            <div className={`hidden md:flex items-center gap-1 px-2 py-1 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-500 ${textMuted}`} title="Layout locked by owner">
               <Lock size={14} />
               <span className="text-xs">Layout locked</span>
             </div>
           ) : (
-            <div className="flex items-center gap-2">
+            <div className={`
+              flex items-center gap-1 md:gap-2
+              md:opacity-0 md:group-hover:opacity-100 transition-opacity duration-500
+            `}>
               <SizePicker value={size} onChange={setSize} variant={isDark ? 'dark' : 'transparent'} />
               <ArrangementPicker value={arrangement} onChange={setArrangement} variant={isDark ? 'dark' : 'transparent'} />
             </div>
           )}
 
-          <div className={`w-px h-5 mx-4 ${isDark ? 'bg-white/30' : 'bg-black/20'}`} />
+          <div className={`w-px h-5 mx-1 md:mx-4 hidden md:block opacity-0 group-hover:opacity-100 transition-opacity duration-500 ${isDark ? 'bg-white/30' : 'bg-black/20'}`} />
 
-          {/* Actions */}
-          <div className="flex items-center gap-2">
+          {/* Actions - always visible */}
+          <div className="flex items-center gap-1 md:gap-2">
             {isOwner && (
               <button
                 onClick={() => router.push(`/edit/${slug}`)}
-                className={`p-1.5 rounded-full hover:bg-black/10 ${textMuted}`}
+                className={`p-1.5 rounded-full hover:bg-black/10 ${textMuted} md:opacity-0 md:group-hover:opacity-100 transition-opacity duration-500`}
                 title="Edit Gallery"
               >
                 <Pencil size={18} />
@@ -289,7 +290,7 @@ export default function GalleryView() {
             )}
             <button
               onClick={handleShare}
-              className={`h-8 px-3 rounded-full transition-all flex items-center justify-center ${
+              className={`h-8 w-8 md:w-auto md:px-3 rounded-full transition-all flex items-center justify-center ${
                 isDark
                   ? 'bg-white text-black hover:bg-white/90'
                   : 'bg-neutral-900 text-white hover:bg-neutral-800'
@@ -297,7 +298,10 @@ export default function GalleryView() {
               title="Copy Link"
             >
               {copied ? (
-                <span className="text-xs font-medium">Copied!</span>
+                <>
+                  <span className="text-xs font-medium hidden md:inline">Copied!</span>
+                  <span className="md:hidden text-sm">✓</span>
+                </>
               ) : (
                 <Share2 size={16} />
               )}
@@ -312,12 +316,27 @@ export default function GalleryView() {
           nfts={nfts}
           descriptions={nftDescriptions}
           backgroundColor={gallery.background_color}
+          hasBackgroundMusic={!!gallery.music_track}
+          onVideoStateChange={setIsShowingVideo}
         />
       ) : (
         <div className="min-h-screen p-4 pt-16 md:p-8 md:pt-16">
-          <NFTGrid nfts={nfts} size={size} arrangement={arrangement} />
+          <NFTGrid nfts={nfts} size={size} arrangement={arrangement} highRes />
         </div>
       )}
+
+      {/* Audio player for background music */}
+      <AudioPlayer
+        track={(() => {
+          if (!gallery.music_track) return null;
+          try {
+            return JSON.parse(gallery.music_track) as MusicTrack;
+          } catch {
+            return null;
+          }
+        })()}
+        externalPause={arrangement === 'presentation' && isShowingVideo}
+      />
     </div>
   );
 }

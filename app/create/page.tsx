@@ -20,6 +20,19 @@ import { Wallet, Loader2, ArrowRight, ArrowLeft, Layers, Gift, Lock, Unlock, Sea
 
 type Step = 'customize' | 'select' | 'arrange' | 'create';
 
+// Skeleton grid for loading state
+function SkeletonGrid({ count = 20 }: { count?: number }) {
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+      {Array.from({ length: count }).map((_, i) => (
+        <div key={i} className="aspect-square bg-neutral-100 rounded-lg animate-pulse">
+          <div className="w-full h-full bg-gradient-to-br from-neutral-100 to-neutral-200" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function CreateGallery() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -859,10 +872,7 @@ export default function CreateGallery() {
 
           {/* NFT Grid */}
           {(loading || loadingCollection) && pageNfts.length === 0 ? (
-            <div className="py-20 text-center">
-              <Loader2 size={32} className="mx-auto text-neutral-400 animate-spin mb-4" />
-              <p className="text-neutral-400">Loading your NFTs...</p>
-            </div>
+            <SkeletonGrid count={20} />
           ) : displayNfts.length > 0 ? (
             <NFTGrid
               nfts={displayNfts}

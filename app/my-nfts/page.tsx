@@ -12,6 +12,26 @@ import { Wallet, Loader2, ChevronLeft, ChevronRight, Layers } from 'lucide-react
 
 const ITEMS_PER_PAGE = PAGE_SIZE;
 
+// Skeleton card for loading state
+function SkeletonCard() {
+  return (
+    <div className="aspect-square bg-neutral-100 rounded-lg animate-pulse">
+      <div className="w-full h-full bg-gradient-to-br from-neutral-100 to-neutral-200" />
+    </div>
+  );
+}
+
+// Skeleton grid that shows while loading
+function SkeletonGrid({ count = 20 }: { count?: number }) {
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+      {Array.from({ length: count }).map((_, i) => (
+        <SkeletonCard key={i} />
+      ))}
+    </div>
+  );
+}
+
 export default function MyNFTs() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -284,10 +304,7 @@ export default function MyNFTs() {
       </div>
 
       {loading && nfts.length === 0 ? (
-        <div className="py-20 text-center">
-          <Loader2 size={32} className="mx-auto text-neutral-400 animate-spin mb-4" />
-          <p className="text-neutral-400">Loading your NFTs...</p>
-        </div>
+        <SkeletonGrid count={20} />
       ) : (
         <>
           <NFTGrid nfts={displayNfts} size={size} arrangement={arrangement} />

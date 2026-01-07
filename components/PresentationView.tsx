@@ -253,11 +253,9 @@ export function PresentationView({
         </button>
       </div>
 
-      {/* Bottom info panel */}
+      {/* Bottom info panel - always visible */}
       <div
-        className={`absolute bottom-0 left-0 right-0 z-20 p-6 bg-gradient-to-t from-black/80 to-transparent transition-opacity duration-300 ${
-          showControls ? 'opacity-100' : 'opacity-0'
-        }`}
+        className="absolute bottom-0 left-0 right-0 z-20 p-6 bg-gradient-to-t from-black/80 to-transparent"
       >
         <div className="max-w-2xl mx-auto text-center">
           {/* Collection name */}

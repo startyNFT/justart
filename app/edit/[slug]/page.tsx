@@ -956,27 +956,46 @@ export default function EditGallery() {
       {step === 'arrange' && (
         <>
           <p className="text-neutral-500 text-sm mb-6">
-            Drag to reorder. {arrangement === 'presentation' && 'Add descriptions for presentation mode.'}
-            {arrangement === 'justified' && ' Customize row layout below.'}
+            Drag to reorder{arrangement === 'justified' && ', adjust row sizes'}.
+            {arrangement === 'presentation' && ' Add descriptions for presentation mode.'}
           </p>
 
-          {/* Custom row editor for justified layout */}
-          {arrangement === 'justified' && selectedNfts.length > 0 && (
-            <div className="mb-8 p-4 bg-neutral-50 rounded-xl">
-              <CustomRowEditor
-                nfts={selectedNfts}
-                rowCounts={customRowCounts}
-                onChange={setCustomRowCounts}
-                size={size}
-              />
-            </div>
-          )}
+          {/* Custom row editor for justified layout - replaces SortableNFTGrid */}
+          {arrangement === 'justified' ? (
+            <div className="space-y-6">
+              <div className="p-4 bg-neutral-50 rounded-xl">
+                <CustomRowEditor
+                  nfts={selectedNfts}
+                  rowCounts={customRowCounts}
+                  onChange={setCustomRowCounts}
+                  onReorder={setSelectedNfts}
+                  onRemove={handleRemoveNft}
+                  size={size}
+                />
+              </div>
 
-          <SortableNFTGrid
-            nfts={selectedNfts}
-            onReorder={setSelectedNfts}
-            onRemove={handleRemoveNft}
-          />
+              {/* Preview */}
+              {selectedNfts.length > 0 && (
+                <div>
+                  <p className="text-sm text-neutral-500 mb-3">Preview</p>
+                  <div className="p-4 rounded-xl" style={{ backgroundColor }}>
+                    <NFTGrid
+                      nfts={selectedNfts}
+                      size={size}
+                      arrangement="justified"
+                      customRowCounts={customRowCounts}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <SortableNFTGrid
+              nfts={selectedNfts}
+              onReorder={setSelectedNfts}
+              onRemove={handleRemoveNft}
+            />
+          )}
 
           {/* Per-NFT descriptions for presentation mode */}
           {arrangement === 'presentation' && selectedNfts.length > 0 && (

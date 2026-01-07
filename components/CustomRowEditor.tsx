@@ -1,18 +1,110 @@
 'use client';
 
 import { useState, useMemo, useCallback } from 'react';
-import { Plus, Minus, RotateCcw, Wand2 } from 'lucide-react';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  rectSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { Plus, Minus, RotateCcw, Wand2, X, GripVertical } from 'lucide-react';
 import type { NFT } from '@/lib/stargaze';
+
+// Sortable NFT item for row editor
+function SortableNFTItem({
+  nft,
+  onRemove
+}: {
+  nft: NFT;
+  onRemove: () => void;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: `${nft.collection.contractAddress}-${nft.tokenId}` });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`relative aspect-square bg-neutral-100 rounded overflow-hidden group ${
+        isDragging ? 'z-50 shadow-xl opacity-90' : ''
+      }`}
+    >
+      <img
+        src={nft.thumbnail || nft.image}
+        alt=""
+        className="w-full h-full object-cover"
+        draggable={false}
+      />
+
+      {/* Drag handle */}
+      <button
+        {...attributes}
+        {...listeners}
+        className="absolute top-1 left-1 p-1 bg-black/60 rounded opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing"
+      >
+        <GripVertical size={12} className="text-white" />
+      </button>
+
+      {/* Remove button */}
+      <button
+        onClick={onRemove}
+        className="absolute top-1 right-1 p-1 bg-black/60 rounded opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500"
+      >
+        <X size={12} className="text-white" />
+      </button>
+    </div>
+  );
+}
 
 type CustomRowEditorProps = {
   nfts: NFT[];
   rowCounts: number[] | null;
   onChange: (rowCounts: number[] | null) => void;
+  onReorder: (nfts: NFT[]) => void;
+  onRemove: (nft: NFT) => void;
   size: 'small' | 'medium' | 'large';
 };
 
-export function CustomRowEditor({ nfts, rowCounts, onChange, size }: CustomRowEditorProps) {
+export function CustomRowEditor({
+  nfts,
+  rowCounts,
+  onChange,
+  onReorder,
+  onRemove,
+  size
+}: CustomRowEditorProps) {
   const totalNfts = nfts.length;
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 8 },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
 
   // Generate auto row counts based on size
   const autoRowCounts = useMemo(() => {
@@ -23,7 +115,6 @@ export function CustomRowEditor({ nfts, rowCounts, onChange, size }: CustomRowEd
     let remaining = totalNfts;
 
     while (remaining > 0) {
-      // Vary row sizes slightly for visual interest
       const variation = rows.length % 3;
       const rowSize = Math.min(remaining, basePerRow + variation);
       rows.push(rowSize);
@@ -33,19 +124,32 @@ export function CustomRowEditor({ nfts, rowCounts, onChange, size }: CustomRowEd
     return rows;
   }, [totalNfts, size]);
 
-  // Use custom or auto
   const activeRowCounts = rowCounts || autoRowCounts;
   const isCustomized = rowCounts !== null;
 
-  // Initialize custom rows from auto if switching to custom mode
   const enableCustomization = useCallback(() => {
     onChange([...autoRowCounts]);
   }, [autoRowCounts, onChange]);
 
-  // Reset to automatic
   const resetToAuto = useCallback(() => {
     onChange(null);
   }, [onChange]);
+
+  // Handle drag end - reorder NFTs
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (over && active.id !== over.id) {
+      const oldIndex = nfts.findIndex(
+        (nft) => `${nft.collection.contractAddress}-${nft.tokenId}` === active.id
+      );
+      const newIndex = nfts.findIndex(
+        (nft) => `${nft.collection.contractAddress}-${nft.tokenId}` === over.id
+      );
+
+      onReorder(arrayMove(nfts, oldIndex, newIndex));
+    }
+  };
 
   // Adjust row count
   const adjustRow = useCallback((rowIndex: number, delta: number) => {
@@ -54,15 +158,10 @@ export function CustomRowEditor({ nfts, rowCounts, onChange, size }: CustomRowEd
     const newCounts = [...rowCounts];
     const newValue = newCounts[rowIndex] + delta;
 
-    // Minimum 1 NFT per row
     if (newValue < 1) return;
 
-    // Calculate what's being taken/given
-    const currentTotal = newCounts.reduce((a, b) => a + b, 0);
-
     if (delta > 0) {
-      // Adding to this row - need to take from somewhere
-      // Try to take from next rows first, then previous
+      // Adding - take from another row
       let taken = false;
       for (let i = rowIndex + 1; i < newCounts.length; i++) {
         if (newCounts[i] > 1) {
@@ -80,38 +179,28 @@ export function CustomRowEditor({ nfts, rowCounts, onChange, size }: CustomRowEd
           }
         }
       }
-      if (!taken && currentTotal < totalNfts) {
-        // Can add without taking (shouldn't normally happen)
-      } else if (!taken) {
-        return; // Can't add
-      }
+      if (!taken) return;
     } else {
-      // Removing from this row - give to next row or create new row
+      // Removing - give to next row
       if (rowIndex < newCounts.length - 1) {
         newCounts[rowIndex + 1]++;
       } else if (rowIndex > 0) {
         newCounts[rowIndex - 1]++;
       } else {
-        return; // Can't remove from only row
+        return;
       }
     }
 
     newCounts[rowIndex] = newValue;
-
-    // Remove empty rows
     const filtered = newCounts.filter(c => c > 0);
     onChange(filtered);
-  }, [rowCounts, totalNfts, onChange]);
+  }, [rowCounts, onChange]);
 
-  // Add a new row by splitting the last row
   const addRow = useCallback(() => {
     if (!rowCounts) return;
-
     const newCounts = [...rowCounts];
     const lastIdx = newCounts.length - 1;
-
     if (newCounts[lastIdx] >= 2) {
-      // Split last row
       const half = Math.floor(newCounts[lastIdx] / 2);
       newCounts[lastIdx] = newCounts[lastIdx] - half;
       newCounts.push(half);
@@ -119,59 +208,55 @@ export function CustomRowEditor({ nfts, rowCounts, onChange, size }: CustomRowEd
     }
   }, [rowCounts, onChange]);
 
-  // Remove last row by merging with previous
   const removeRow = useCallback(() => {
     if (!rowCounts || rowCounts.length <= 1) return;
-
     const newCounts = [...rowCounts];
     const lastCount = newCounts.pop()!;
     newCounts[newCounts.length - 1] += lastCount;
     onChange(newCounts);
   }, [rowCounts, onChange]);
 
-  // Calculate NFT indices for each row
-  const rowsWithNfts = useMemo(() => {
-    const rows: { count: number; nfts: NFT[]; startIndex: number }[] = [];
+  // Build rows from NFTs based on row counts
+  const rows = useMemo(() => {
+    const result: NFT[][] = [];
     let index = 0;
 
     for (const count of activeRowCounts) {
-      rows.push({
-        count,
-        nfts: nfts.slice(index, index + count),
-        startIndex: index,
-      });
+      result.push(nfts.slice(index, index + count));
       index += count;
     }
 
-    return rows;
+    return result;
   }, [activeRowCounts, nfts]);
 
   if (totalNfts === 0) {
     return (
-      <div className="text-center py-8 text-neutral-400">
-        Select NFTs to customize row layout
+      <div className="border-2 border-dashed border-neutral-200 rounded-lg p-8 text-center text-neutral-400">
+        Select NFTs to add to your gallery
       </div>
     );
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       {/* Header with toggle */}
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-sm font-medium text-neutral-700">Row Layout</h3>
+          <h3 className="text-sm font-medium text-neutral-700">
+            {isCustomized ? 'Custom Row Layout' : 'Automatic Row Layout'}
+          </h3>
           <p className="text-xs text-neutral-400 mt-0.5">
-            {isCustomized ? 'Custom layout' : 'Automatic layout'}
+            Drag to reorder, click X to remove
           </p>
         </div>
 
         {!isCustomized ? (
           <button
             onClick={enableCustomization}
-            className="flex items-center gap-2 px-3 py-1.5 text-sm bg-neutral-100 hover:bg-neutral-200 rounded-lg transition-colors"
+            className="flex items-center gap-2 px-3 py-1.5 text-sm bg-neutral-900 text-white rounded-lg hover:bg-neutral-800 transition-colors"
           >
             <Wand2 size={14} />
-            Customize
+            Customize Rows
           </button>
         ) : (
           <button
@@ -184,62 +269,62 @@ export function CustomRowEditor({ nfts, rowCounts, onChange, size }: CustomRowEd
         )}
       </div>
 
-      {/* Row preview and controls */}
-      <div className="space-y-2">
-        {rowsWithNfts.map((row, rowIndex) => (
-          <div key={rowIndex} className="flex items-center gap-3">
-            {/* Row label and controls */}
-            {isCustomized && (
-              <div className="flex items-center gap-1 flex-shrink-0 w-24">
-                <span className="text-xs text-neutral-400 w-8">R{rowIndex + 1}</span>
-                <button
-                  onClick={() => adjustRow(rowIndex, -1)}
-                  disabled={row.count <= 1}
-                  className="p-1 rounded hover:bg-neutral-100 disabled:opacity-30 disabled:cursor-not-allowed"
-                >
-                  <Minus size={14} />
-                </button>
-                <span className="text-sm font-medium w-6 text-center">{row.count}</span>
-                <button
-                  onClick={() => adjustRow(rowIndex, 1)}
-                  className="p-1 rounded hover:bg-neutral-100"
-                >
-                  <Plus size={14} />
-                </button>
-              </div>
-            )}
+      {/* Drag and drop grid organized by rows */}
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={handleDragEnd}
+      >
+        <SortableContext
+          items={nfts.map((nft) => `${nft.collection.contractAddress}-${nft.tokenId}`)}
+          strategy={rectSortingStrategy}
+        >
+          <div className="space-y-2">
+            {rows.map((rowNfts, rowIndex) => (
+              <div key={rowIndex} className="flex items-center gap-2">
+                {/* Row controls */}
+                {isCustomized && (
+                  <div className="flex flex-col items-center gap-0.5 flex-shrink-0 w-8">
+                    <button
+                      onClick={() => adjustRow(rowIndex, 1)}
+                      className="p-0.5 rounded hover:bg-neutral-200 text-neutral-400 hover:text-neutral-600"
+                      title="Add NFT to this row"
+                    >
+                      <Plus size={14} />
+                    </button>
+                    <span className="text-xs text-neutral-500 font-medium">{rowNfts.length}</span>
+                    <button
+                      onClick={() => adjustRow(rowIndex, -1)}
+                      disabled={rowNfts.length <= 1}
+                      className="p-0.5 rounded hover:bg-neutral-200 text-neutral-400 hover:text-neutral-600 disabled:opacity-30 disabled:cursor-not-allowed"
+                      title="Remove NFT from this row"
+                    >
+                      <Minus size={14} />
+                    </button>
+                  </div>
+                )}
 
-            {/* NFT thumbnails preview */}
-            <div className="flex-1 flex gap-1 overflow-hidden">
-              {row.nfts.map((nft, i) => (
-                <div
-                  key={`${nft.collection.contractAddress}-${nft.tokenId}-${i}`}
-                  className="flex-1 aspect-square bg-neutral-100 rounded overflow-hidden min-w-0"
-                  style={{ maxWidth: isCustomized ? '60px' : '40px' }}
-                >
-                  <img
-                    src={nft.thumbnail || nft.image}
-                    alt=""
-                    className="w-full h-full object-cover"
-                    loading="lazy"
-                  />
+                {/* NFTs in this row */}
+                <div className="flex-1 grid gap-1" style={{
+                  gridTemplateColumns: `repeat(${rowNfts.length}, 1fr)`
+                }}>
+                  {rowNfts.map((nft) => (
+                    <SortableNFTItem
+                      key={`${nft.collection.contractAddress}-${nft.tokenId}`}
+                      nft={nft}
+                      onRemove={() => onRemove(nft)}
+                    />
+                  ))}
                 </div>
-              ))}
-              {/* Placeholder for remaining space */}
-              {row.nfts.length < row.count && (
-                <div
-                  className="flex-1 aspect-square bg-neutral-50 rounded border-2 border-dashed border-neutral-200 min-w-0"
-                  style={{ maxWidth: isCustomized ? '60px' : '40px' }}
-                />
-              )}
-            </div>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
+        </SortableContext>
+      </DndContext>
 
       {/* Add/Remove row buttons */}
       {isCustomized && (
-        <div className="flex items-center gap-2 pt-2">
+        <div className="flex items-center gap-2 pt-2 border-t">
           <button
             onClick={addRow}
             disabled={activeRowCounts[activeRowCounts.length - 1] < 2}
@@ -254,16 +339,14 @@ export function CustomRowEditor({ nfts, rowCounts, onChange, size }: CustomRowEd
               className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-neutral-500 hover:bg-neutral-100 rounded-lg transition-colors"
             >
               <Minus size={14} />
-              Remove Row
+              Merge Last Row
             </button>
           )}
+          <span className="ml-auto text-xs text-neutral-400">
+            {activeRowCounts.length} rows · {totalNfts} NFTs
+          </span>
         </div>
       )}
-
-      {/* Summary */}
-      <div className="text-xs text-neutral-400 pt-2 border-t">
-        {activeRowCounts.length} rows &middot; {totalNfts} NFTs
-      </div>
     </div>
   );
 }

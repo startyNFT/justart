@@ -179,21 +179,15 @@ function mapTokenToNFT(token: {
   };
 }
 
-// Cache helpers
+// Cache helpers - use sessionStorage for session-based caching
 const CACHE_KEY_PREFIX = 'pureart_nfts_page_';
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 function getCachedPage(walletAddress: string, offset: number): NFT[] | null {
   if (typeof window === 'undefined') return null;
   try {
-    const cached = localStorage.getItem(`${CACHE_KEY_PREFIX}${walletAddress}_${offset}`);
+    const cached = sessionStorage.getItem(`${CACHE_KEY_PREFIX}${walletAddress}_${offset}`);
     if (!cached) return null;
-    const { data, timestamp } = JSON.parse(cached);
-    if (Date.now() - timestamp > CACHE_TTL) {
-      localStorage.removeItem(`${CACHE_KEY_PREFIX}${walletAddress}_${offset}`);
-      return null;
-    }
-    return data;
+    return JSON.parse(cached);
   } catch {
     return null;
   }
@@ -202,10 +196,7 @@ function getCachedPage(walletAddress: string, offset: number): NFT[] | null {
 function setCachedPage(walletAddress: string, offset: number, data: NFT[]) {
   if (typeof window === 'undefined') return;
   try {
-    localStorage.setItem(`${CACHE_KEY_PREFIX}${walletAddress}_${offset}`, JSON.stringify({
-      data,
-      timestamp: Date.now(),
-    }));
+    sessionStorage.setItem(`${CACHE_KEY_PREFIX}${walletAddress}_${offset}`, JSON.stringify(data));
   } catch {
     // Storage full or unavailable
   }
@@ -276,7 +267,17 @@ export async function fetchNFTPage(
   // Check cache first for non-first pages
   const cached = getCachedPage(walletAddress, offset);
   if (cached && cached.length > 0 && offset > 0) {
-    return { nfts: cached, total: 0, hasMore: true };
+    // Try to get cached total
+    let cachedTotal = 0;
+    if (typeof window !== 'undefined') {
+      try {
+        const totalData = sessionStorage.getItem(`pureart_nfts_total_${walletAddress}`);
+        if (totalData) {
+          cachedTotal = parseInt(totalData, 10) || 0;
+        }
+      } catch { /* ignore */ }
+    }
+    return { nfts: cached, total: cachedTotal, hasMore: true };
   }
 
   try {
@@ -320,6 +321,13 @@ export async function fetchNFTPage(
 
     // Cache the results
     setCachedPage(walletAddress, offset, nfts);
+
+    // Cache the total count
+    if (typeof window !== 'undefined' && total > 0) {
+      try {
+        sessionStorage.setItem(`pureart_nfts_total_${walletAddress}`, String(total));
+      } catch { /* ignore */ }
+    }
 
     return { nfts, total, hasMore: offset + nfts.length < total };
   } catch (error) {

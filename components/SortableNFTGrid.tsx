@@ -53,6 +53,8 @@ function SortableItem({ nft, onRemove }: SortableItemProps) {
           src={nft.thumbnail || nft.image}
           alt={nft.name}
           className="absolute inset-0 w-full h-full object-cover"
+          draggable={false}
+          decoding="async"
           loading="lazy"
         />
       ) : (

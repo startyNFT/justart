@@ -7,6 +7,7 @@ import {
   GalleryVertical,
   LayoutGrid,
   AlignJustify,
+  Presentation,
 } from 'lucide-react';
 import {
   SIZE_OPTIONS,
@@ -27,6 +28,7 @@ const arrangementIcons: Record<ArrangementType, React.ElementType> = {
   grid: LayoutGrid,
   vertical: GalleryVertical,
   justified: AlignJustify,
+  presentation: Presentation,
 };
 
 type SizePickerProps = {
@@ -86,9 +88,10 @@ type ArrangementPickerProps = {
   value: ArrangementType;
   onChange: (arrangement: ArrangementType) => void;
   variant?: 'light' | 'dark' | 'transparent';
+  exclude?: ArrangementType[]; // Arrangements to exclude from the picker
 };
 
-export function ArrangementPicker({ value, onChange, variant = 'light' }: ArrangementPickerProps) {
+export function ArrangementPicker({ value, onChange, variant = 'light', exclude = [] }: ArrangementPickerProps) {
   const containerClass = variant === 'transparent' || variant === 'dark'
     ? 'flex gap-1'
     : 'flex gap-1 p-1 bg-neutral-100 rounded-lg';
@@ -115,9 +118,12 @@ export function ArrangementPicker({ value, onChange, variant = 'light' }: Arrang
     }`;
   };
 
+  // Filter out excluded arrangements
+  const filteredOptions = ARRANGEMENT_OPTIONS.filter(({ id }) => !exclude.includes(id));
+
   return (
     <div className={containerClass}>
-      {ARRANGEMENT_OPTIONS.map(({ id, label }) => {
+      {filteredOptions.map(({ id, label }) => {
         const Icon = arrangementIcons[id];
         const isActive = value === id;
         return (

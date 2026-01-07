@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useChain } from '@cosmos-kit/react';
 import { NFTGrid } from '@/components/NFTGrid';
@@ -8,26 +8,28 @@ import { NFTSelector } from '@/components/NFTSelector';
 import { SortableNFTGrid } from '@/components/SortableNFTGrid';
 import { SizePicker, ArrangementPicker } from '@/components/LayoutPicker';
 import { ColorPicker } from '@/components/ColorPicker';
-import { fetchNFTPage, prefetchNFTPages, PAGE_SIZE, type NFT } from '@/lib/stargaze';
+import { fetchNFTPage, type NFT } from '@/lib/stargaze';
 import { supabase } from '@/lib/supabase';
-import { calculateGalleryPrice, generateSlug } from '@/lib/utils';
+import { generateSlug } from '@/lib/utils';
 import { TREASURY_WALLET } from '@/lib/constants';
+import { fetchPaymentsToTreasury, calculateEffectivePrice, JUSTART_MEMO_PREFIX } from '@/lib/cosmos';
 import type { SizeType, ArrangementType } from '@/lib/constants';
-import { Wallet, Loader2, ArrowRight, ArrowLeft } from 'lucide-react';
+import { Wallet, Loader2, ArrowRight, ArrowLeft, Layers, Gift, Lock, Unlock } from 'lucide-react';
 
 type Step = 'select' | 'arrange' | 'customize';
+
+const ITEMS_PER_PAGE = 50;
 
 export default function CreateGallery() {
   const router = useRouter();
   const { address, isWalletConnected, openView, getSigningStargateClient } = useChain('stargaze');
 
   const [step, setStep] = useState<Step>('select');
-  const [nfts, setNfts] = useState<NFT[]>([]);
+  const [allNfts, setAllNfts] = useState<NFT[]>([]); // All NFTs loaded
   const [loading, setLoading] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [total, setTotal] = useState(0);
-  const [hasMore, setHasMore] = useState(true);
+  const [loadingProgress, setLoadingProgress] = useState('');
   const [creating, setCreating] = useState(false);
+  const [hideDuplicates, setHideDuplicates] = useState(true);
 
   const [selectedNfts, setSelectedNfts] = useState<NFT[]>([]);
   const [size, setSize] = useState<SizeType>('medium');
@@ -36,95 +38,132 @@ export default function CreateGallery() {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [showInfo, setShowInfo] = useState(true);
+  const [lockLayout, setLockLayout] = useState(false);
+  const [nftDescriptions, setNftDescriptions] = useState<Record<string, string>>({});
 
   const [galleryCount, setGalleryCount] = useState(0);
-  const price = calculateGalleryPrice(galleryCount);
+  const [paidSlots, setPaidSlots] = useState(1); // First gallery is always free
+  const [checkingPayments, setCheckingPayments] = useState(false);
+  const [hasActiveFilter, setHasActiveFilter] = useState(false);
 
-  const loadMoreRef = useRef<HTMLDivElement>(null);
-  const currentOffset = useRef(0);
+  // Stable callback for filter state changes
+  const handleFilterActive = useCallback((active: boolean) => {
+    setHasActiveFilter(active);
+  }, []);
+
+  // Calculate effective price considering past payments
+  const effectivePrice = calculateEffectivePrice(galleryCount, paidSlots);
+  const hasCredit = paidSlots > galleryCount;
 
   const selectedIds = new Set(
     selectedNfts.map((nft) => `${nft.collection.contractAddress}-${nft.tokenId}`)
   );
 
-  // Initial load with retry
+  // Load ALL NFTs progressively
   useEffect(() => {
     if (!address) return;
 
-    async function load(retryCount = 0) {
+    let cancelled = false;
+
+    async function loadAllNfts() {
       setLoading(true);
-      currentOffset.current = 0;
+      setAllNfts([]);
+      setLoadingProgress('Loading NFTs...');
 
-      const [nftResult, userResult] = await Promise.all([
-        fetchNFTPage(address!, 0),
-        supabase.from('users').select('id').eq('wallet_address', address!).single(),
-      ]);
+      // First, get total count and first batch
+      const firstResult = await fetchNFTPage(address!, 0, ITEMS_PER_PAGE);
 
-      // Retry if we got no NFTs
-      if (nftResult.nfts.length === 0 && retryCount < 3) {
-        console.warn(`Got 0 NFTs, retrying (attempt ${retryCount + 1})...`);
+      if (cancelled) return;
+
+      if (firstResult.nfts.length === 0) {
+        // Retry once if no results
         await new Promise(resolve => setTimeout(resolve, 1500));
-        return load(retryCount + 1);
+        const retryResult = await fetchNFTPage(address!, 0, ITEMS_PER_PAGE);
+        if (retryResult.nfts.length === 0) {
+          setLoading(false);
+          setLoadingProgress('');
+          return;
+        }
+        setAllNfts(retryResult.nfts);
+        if (!retryResult.hasMore) {
+          setLoading(false);
+          setLoadingProgress('');
+          return;
+        }
+      } else {
+        setAllNfts(firstResult.nfts);
       }
 
-      setNfts(nftResult.nfts);
-      setTotal(nftResult.total);
-      setHasMore(nftResult.hasMore);
-      currentOffset.current = PAGE_SIZE;
+      const total = firstResult.total;
+      let loadedCount = firstResult.nfts.length;
 
-      // Prefetch next pages
-      if (nftResult.hasMore) {
-        prefetchNFTPages(address!, 0, nftResult.total);
-      }
+      // Load remaining pages
+      while (loadedCount < total && !cancelled) {
+        setLoadingProgress(`Loading ${loadedCount} / ${total} NFTs...`);
 
-      if (userResult.data) {
-        const { count } = await supabase
-          .from('galleries')
-          .select('*', { count: 'exact', head: true })
-          .eq('user_id', userResult.data.id);
-        setGalleryCount(count || 0);
+        const result = await fetchNFTPage(address!, loadedCount, ITEMS_PER_PAGE);
+        if (cancelled) return;
+
+        if (result.nfts.length === 0) break;
+
+        setAllNfts(prev => [...prev, ...result.nfts]);
+        loadedCount += result.nfts.length;
+
+        if (!result.hasMore) break;
       }
 
       setLoading(false);
+      setLoadingProgress('');
+
+      // Load user data and check payments
+      const { data: user } = await supabase
+        .from('users')
+        .select('id')
+        .eq('wallet_address', address!)
+        .single();
+
+      if (user) {
+        const { count } = await supabase
+          .from('galleries')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', user.id);
+        setGalleryCount(count || 0);
+      }
+
+      // Check for past payments
+      setCheckingPayments(true);
+      try {
+        const paymentInfo = await fetchPaymentsToTreasury(address!);
+        setPaidSlots(paymentInfo.paidSlots);
+      } catch (err) {
+        console.error('Error checking past payments:', err);
+      }
+      setCheckingPayments(false);
     }
 
-    load();
+    loadAllNfts();
+
+    return () => {
+      cancelled = true;
+    };
   }, [address]);
 
-  // Load more function
-  const loadMore = useCallback(async () => {
-    if (!address || loadingMore || !hasMore) return;
-
-    setLoadingMore(true);
-    const result = await fetchNFTPage(address, currentOffset.current);
-
-    setNfts(prev => [...prev, ...result.nfts]);
-    setHasMore(result.hasMore);
-    currentOffset.current += PAGE_SIZE;
-
-    if (result.hasMore) {
-      prefetchNFTPages(address, currentOffset.current, result.total);
+  // Deduplicate open editions (same collection + same image = duplicate)
+  const deduplicatedNfts = useMemo(() => {
+    if (!hideDuplicates) {
+      return allNfts;
     }
 
-    setLoadingMore(false);
-  }, [address, loadingMore, hasMore]);
+    const seen = new Map<string, NFT>();
+    for (const nft of allNfts) {
+      const key = `${nft.collection.contractAddress}-${nft.image}`;
+      if (!seen.has(key)) {
+        seen.set(key, nft);
+      }
+    }
 
-  // Intersection observer for infinite scroll
-  useEffect(() => {
-    if (!loadMoreRef.current || step !== 'select') return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting && hasMore && !loadingMore && !loading) {
-          loadMore();
-        }
-      },
-      { rootMargin: '400px' }
-    );
-
-    observer.observe(loadMoreRef.current);
-    return () => observer.disconnect();
-  }, [hasMore, loadingMore, loading, loadMore, step]);
+    return Array.from(seen.values());
+  }, [allNfts, hideDuplicates]);
 
   const handleSelectNft = (nft: NFT) => {
     const key = `${nft.collection.contractAddress}-${nft.tokenId}`;
@@ -152,14 +191,17 @@ export default function CreateGallery() {
     try {
       let txHash: string | null = null;
 
-      if (price > 0) {
+      // Only charge if they haven't already paid (effectivePrice considers past payments)
+      if (effectivePrice > 0) {
         const client = await getSigningStargateClient();
-        const amount = { denom: 'ustars', amount: String(price * 1_000_000) };
+        const amount = { denom: 'ustars', amount: String(effectivePrice * 1_000_000) };
+        const memo = `${JUSTART_MEMO_PREFIX}-${Date.now()}`;
         const result = await client.sendTokens(
           address,
           TREASURY_WALLET,
           [amount],
-          { amount: [{ denom: 'ustars', amount: '0' }], gas: '200000' }
+          { amount: [{ denom: 'ustars', amount: '0' }], gas: '200000' },
+          memo
         );
         txHash = result.transactionHash;
       }
@@ -184,10 +226,16 @@ export default function CreateGallery() {
         userId = newUser.id;
       }
 
-      const nftIds = selectedNfts.map((nft) => ({
-        contract: nft.collection.contractAddress,
-        token_id: nft.tokenId,
-      }));
+      // Build nft_ids with descriptions
+      const nftIds = selectedNfts.map((nft) => {
+        const key = `${nft.collection.contractAddress}-${nft.tokenId}`;
+        const desc = nftDescriptions[key];
+        return {
+          contract: nft.collection.contractAddress,
+          token_id: nft.tokenId,
+          ...(desc ? { description: desc } : {}),
+        };
+      });
 
       const slug = generateSlug();
       const layout = `${size}-${arrangement}`;
@@ -202,6 +250,7 @@ export default function CreateGallery() {
         nft_ids: nftIds,
         payment_tx_hash: txHash,
         show_info: showInfo,
+        lock_layout: lockLayout,
       });
 
       if (error) throw error;
@@ -230,14 +279,7 @@ export default function CreateGallery() {
     );
   }
 
-  if (loading) {
-    return (
-      <div className="max-w-7xl mx-auto px-4 py-20 text-center">
-        <Loader2 size={32} className="mx-auto text-neutral-400 animate-spin" />
-      </div>
-    );
-  }
-
+  // Show the page even while loading - loading state is handled inline
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
       {/* Step indicator */}
@@ -263,33 +305,59 @@ export default function CreateGallery() {
       {step === 'select' && (
         <>
           <div className="flex items-center justify-between mb-6">
-            <p className="text-sm text-neutral-400">
-              {nfts.length > 0
-                ? `${nfts.length}${total > nfts.length ? ` / ${total}` : ''} NFTs`
-                : 'No NFTs found'}
-              {selectedNfts.length > 0 && ` • ${selectedNfts.length} selected`}
-            </p>
-            <button
-              onClick={() => setStep('arrange')}
-              disabled={selectedNfts.length === 0}
-              className="flex items-center gap-2 px-4 py-2 bg-neutral-900 text-white rounded-lg hover:bg-neutral-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Next: Arrange
-              <ArrowRight size={18} />
-            </button>
+            <div className="flex items-center gap-3">
+              <p className="text-sm text-neutral-400">
+                {deduplicatedNfts.length > 0
+                  ? `${deduplicatedNfts.length} NFTs`
+                  : loading
+                  ? 'Loading...'
+                  : 'No NFTs found'}
+                {selectedNfts.length > 0 && ` • ${selectedNfts.length} selected`}
+              </p>
+              {loading && loadingProgress && (
+                <span className="text-xs text-neutral-400">{loadingProgress}</span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setHideDuplicates(!hideDuplicates)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                  hideDuplicates
+                    ? 'bg-neutral-900 text-white'
+                    : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
+                }`}
+                title={hideDuplicates ? 'Show all NFTs' : 'Hide duplicate open editions'}
+              >
+                <Layers size={14} />
+                <span className="hidden sm:inline">{hideDuplicates ? 'Unique' : 'All'}</span>
+              </button>
+              <button
+                onClick={() => setStep('arrange')}
+                disabled={selectedNfts.length === 0}
+                className="flex items-center gap-2 px-4 py-2 bg-neutral-900 text-white rounded-lg hover:bg-neutral-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Next: Arrange
+                <ArrowRight size={18} />
+              </button>
+            </div>
           </div>
-          <NFTSelector
-            nfts={nfts}
-            selectedIds={selectedIds}
-            onSelect={handleSelectNft}
-            useThumbnails
-          />
-          {/* Infinite scroll trigger */}
-          <div ref={loadMoreRef} className="h-20 flex items-center justify-center">
-            {loadingMore && (
-              <Loader2 size={24} className="text-neutral-400 animate-spin" />
-            )}
-          </div>
+
+          {loading && allNfts.length === 0 ? (
+            <div className="py-20 text-center">
+              <Loader2 size={32} className="mx-auto text-neutral-400 animate-spin mb-4" />
+              <p className="text-neutral-400">{loadingProgress || 'Loading your NFTs...'}</p>
+            </div>
+          ) : (
+            <NFTSelector
+              nfts={deduplicatedNfts}
+              selectedIds={selectedIds}
+              onSelect={handleSelectNft}
+              useThumbnails
+              onFilterActive={handleFilterActive}
+              loading={loading}
+              loadingProgress={loadingProgress}
+            />
+          )}
         </>
       )}
 
@@ -319,6 +387,46 @@ export default function CreateGallery() {
             onReorder={setSelectedNfts}
             onRemove={handleRemoveNft}
           />
+
+          {/* Per-NFT descriptions for presentation mode */}
+          {arrangement === 'presentation' && selectedNfts.length > 0 && (
+            <div className="mt-8 border-t pt-8">
+              <h3 className="text-lg font-medium mb-4">NFT Descriptions</h3>
+              <p className="text-sm text-neutral-500 mb-6">
+                Add personal descriptions or stories for each NFT. These will appear during the presentation.
+              </p>
+              <div className="space-y-4">
+                {selectedNfts.map((nft, index) => {
+                  const key = `${nft.collection.contractAddress}-${nft.tokenId}`;
+                  return (
+                    <div key={key} className="flex gap-4 items-start p-4 bg-neutral-50 rounded-lg">
+                      <div className="flex-shrink-0">
+                        <span className="text-sm text-neutral-400 mr-2">{index + 1}.</span>
+                        <img
+                          src={nft.thumbnail || nft.image}
+                          alt=""
+                          className="w-16 h-16 object-cover rounded"
+                        />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm font-medium mb-2">{nft.collection.name}</p>
+                        <textarea
+                          value={nftDescriptions[key] || ''}
+                          onChange={(e) => setNftDescriptions(prev => ({
+                            ...prev,
+                            [key]: e.target.value
+                          }))}
+                          placeholder="Add a description, story, or context for this NFT..."
+                          rows={2}
+                          className="w-full px-3 py-2 text-sm border border-neutral-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-neutral-200 resize-none"
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </>
       )}
 
@@ -411,6 +519,39 @@ export default function CreateGallery() {
               </p>
             </div>
 
+            <div>
+              <label className="block text-sm font-medium text-neutral-700 mb-2">
+                Layout Lock
+              </label>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setLockLayout(false)}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    !lockLayout
+                      ? 'bg-neutral-900 text-white'
+                      : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
+                  }`}
+                >
+                  <Unlock size={14} />
+                  Unlocked
+                </button>
+                <button
+                  onClick={() => setLockLayout(true)}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    lockLayout
+                      ? 'bg-neutral-900 text-white'
+                      : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
+                  }`}
+                >
+                  <Lock size={14} />
+                  Locked
+                </button>
+              </div>
+              <p className="text-xs text-neutral-400 mt-2">
+                When locked, visitors cannot change the size or arrangement of your gallery
+              </p>
+            </div>
+
             <div
               className="p-4 rounded-lg"
               style={{ backgroundColor }}
@@ -420,11 +561,25 @@ export default function CreateGallery() {
             </div>
 
             <div className="pt-4 border-t border-neutral-100">
+              {hasCredit && (
+                <div className="flex items-center gap-2 mb-4 p-3 bg-green-50 rounded-lg text-green-700">
+                  <Gift size={18} />
+                  <span className="text-sm">
+                    You have credit from a previous payment - this gallery is free!
+                  </span>
+                </div>
+              )}
               <div className="flex items-center justify-between mb-4">
                 <span className="text-neutral-600">Cost</span>
-                <span className="font-medium">
-                  {price === 0 ? 'Free' : `${price} STARS`}
-                </span>
+                <div className="text-right">
+                  {checkingPayments ? (
+                    <span className="text-neutral-400 text-sm">Checking payments...</span>
+                  ) : effectivePrice === 0 ? (
+                    <span className="font-medium text-green-600">Free</span>
+                  ) : (
+                    <span className="font-medium">{effectivePrice} STARS</span>
+                  )}
+                </div>
               </div>
               <button
                 onClick={handleCreate}
@@ -439,7 +594,7 @@ export default function CreateGallery() {
                 ) : (
                   <>
                     Create Gallery
-                    {price > 0 && <span className="text-neutral-400">({price} STARS)</span>}
+                    {effectivePrice > 0 && <span className="text-neutral-400">({effectivePrice} STARS)</span>}
                   </>
                 )}
               </button>

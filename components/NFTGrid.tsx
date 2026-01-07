@@ -74,7 +74,7 @@ const SimpleCard = memo(function SimpleCard({
         className="w-full h-auto"
         draggable={false}
         decoding="async"
-        loading="eager"
+        loading="lazy"
       />
       {selectable && selected && (
         <div className="absolute top-2 right-2 w-5 h-5 bg-neutral-900 rounded-full flex items-center justify-center">
@@ -131,7 +131,7 @@ const JustifiedItem = memo(function JustifiedItem({
         className="w-full h-full object-cover"
         draggable={false}
         decoding="async"
-        loading="eager"
+        loading="lazy"
       />
       {selectable && selected && (
         <div className="absolute top-2 right-2 w-5 h-5 bg-neutral-900 rounded-full flex items-center justify-center">
@@ -223,15 +223,24 @@ export function NFTGrid({
   }
 
   const containerRef = useRef<HTMLDivElement>(null);
-  const [containerWidth, setContainerWidth] = useState(1200);
+  const [containerWidth, setContainerWidth] = useState(0);
 
   useEffect(() => {
     if (!containerRef.current) return;
-    const update = () => setContainerWidth(containerRef.current?.offsetWidth || 1200);
-    update();
-    window.addEventListener('resize', update);
-    return () => window.removeEventListener('resize', update);
-  }, []);
+
+    // Use ResizeObserver for reliable width updates
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setContainerWidth(entry.contentRect.width);
+      }
+    });
+
+    resizeObserver.observe(containerRef.current);
+    // Initial measurement
+    setContainerWidth(containerRef.current.offsetWidth);
+
+    return () => resizeObserver.disconnect();
+  }, [arrangement]); // Re-run when arrangement changes
 
   if (nfts.length === 0) {
     return (
@@ -288,12 +297,19 @@ export function NFTGrid({
 
   // Justified
   if (arrangement === 'justified') {
+    // Wait for container width measurement before rendering
+    if (containerWidth === 0) {
+      return (
+        <div ref={containerRef} className="nft-grid w-full min-h-[200px]" />
+      );
+    }
+
     const rows = calculateRows(nfts, containerWidth, justifiedRowHeights[size], 4);
 
     return (
-      <div ref={containerRef} className="nft-grid flex flex-col gap-1">
+      <div ref={containerRef} className="nft-grid w-full flex flex-col gap-1">
         {rows.map((row, rowIdx) => (
-          <div key={rowIdx} className="flex gap-1">
+          <div key={rowIdx} className="flex gap-1 w-full">
             {row.map(({ nft, width, height, index }) => (
               <JustifiedItem
                 key={getKey(nft, index)}
@@ -309,6 +325,11 @@ export function NFTGrid({
         ))}
       </div>
     );
+  }
+
+  // Presentation mode is handled at the page level, not in NFTGrid
+  if (arrangement === 'presentation') {
+    return null;
   }
 
   return null;

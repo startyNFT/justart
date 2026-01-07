@@ -77,24 +77,19 @@ export const NFTCard = memo(function NFTCard({ nft, selected, onSelect, selectab
             playsInline
             preload="auto"
           />
-          {!videoPlaying && (
-            <button
-              onClick={handleVideoToggle}
-              className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity"
-            >
-              <div className="w-12 h-12 bg-black/70 rounded-full flex items-center justify-center">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><polygon points="5,3 19,12 5,21"/></svg>
-              </div>
-            </button>
-          )}
-          {videoPlaying && (
-            <button
-              onClick={handleVideoToggle}
-              className="absolute bottom-2 right-2 w-8 h-8 bg-black/70 rounded-full flex items-center justify-center"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="white"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
-            </button>
-          )}
+          {/* Play/pause button - only this area triggers video toggle */}
+          <button
+            onClick={handleVideoToggle}
+            className={`absolute bottom-2 right-2 w-10 h-10 bg-black/70 rounded-full flex items-center justify-center transition-opacity ${
+              videoPlaying ? 'opacity-100' : 'opacity-0 hover:opacity-100'
+            }`}
+          >
+            {videoPlaying ? (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+            ) : (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><polygon points="5,3 19,12 5,21"/></svg>
+            )}
+          </button>
         </>
       ) : (nft.thumbnail || nft.image) ? (
         <img
@@ -103,7 +98,7 @@ export const NFTCard = memo(function NFTCard({ nft, selected, onSelect, selectab
           className="absolute inset-0 w-full h-full object-cover"
           draggable={false}
           decoding="async"
-          loading="eager"
+          loading="lazy"
         />
       ) : (
         <div className="w-full h-full flex items-center justify-center text-neutral-300 text-xs">

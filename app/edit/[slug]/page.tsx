@@ -11,7 +11,7 @@ import { ColorPicker } from '@/components/ColorPicker';
 import { fetchNFTPage, fetchNFTById, prefetchNFTPages, PAGE_SIZE, type NFT } from '@/lib/stargaze';
 import { supabase, type Gallery } from '@/lib/supabase';
 import type { SizeType, ArrangementType } from '@/lib/constants';
-import { Loader2, ArrowLeft, Save, Trash2 } from 'lucide-react';
+import { Loader2, ArrowLeft, Save, Trash2, Lock, Unlock } from 'lucide-react';
 
 type Step = 'select' | 'arrange' | 'customize';
 
@@ -38,6 +38,8 @@ export default function EditGallery() {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [showInfo, setShowInfo] = useState(true);
+  const [lockLayout, setLockLayout] = useState(false);
+  const [nftDescriptions, setNftDescriptions] = useState<Record<string, string>>({});
 
   const loadMoreRef = useRef<HTMLDivElement>(null);
   const currentOffset = useRef(0);
@@ -73,6 +75,16 @@ export default function EditGallery() {
       setDescription(galleryData.description || '');
       setBackgroundColor(galleryData.background_color);
       setShowInfo(galleryData.show_info ?? true);
+      setLockLayout(galleryData.lock_layout ?? false);
+
+      // Extract per-NFT descriptions
+      const descriptions: Record<string, string> = {};
+      (galleryData.nft_ids as Array<{ contract: string; token_id: string; description?: string }>).forEach((item) => {
+        if (item.description) {
+          descriptions[`${item.contract}-${item.token_id}`] = item.description;
+        }
+      });
+      setNftDescriptions(descriptions);
 
       // Parse layout
       const storedLayout = galleryData.layout || 'medium-grid';
@@ -167,10 +179,16 @@ export default function EditGallery() {
     setSaving(true);
 
     try {
-      const nftIds = selectedNfts.map((nft) => ({
-        contract: nft.collection.contractAddress,
-        token_id: nft.tokenId,
-      }));
+      // Build nft_ids with descriptions
+      const nftIds = selectedNfts.map((nft) => {
+        const key = `${nft.collection.contractAddress}-${nft.tokenId}`;
+        const desc = nftDescriptions[key];
+        return {
+          contract: nft.collection.contractAddress,
+          token_id: nft.tokenId,
+          ...(desc ? { description: desc } : {}),
+        };
+      });
 
       const layout = `${size}-${arrangement}`;
 
@@ -183,6 +201,7 @@ export default function EditGallery() {
           layout,
           nft_ids: nftIds,
           show_info: showInfo,
+          lock_layout: lockLayout,
         })
         .eq('id', gallery.id);
 
@@ -377,6 +396,39 @@ export default function EditGallery() {
               </p>
             </div>
 
+            <div>
+              <label className="block text-sm font-medium text-neutral-700 mb-2">
+                Layout Lock
+              </label>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setLockLayout(false)}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    !lockLayout
+                      ? 'bg-neutral-900 text-white'
+                      : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
+                  }`}
+                >
+                  <Unlock size={14} />
+                  Unlocked
+                </button>
+                <button
+                  onClick={() => setLockLayout(true)}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    lockLayout
+                      ? 'bg-neutral-900 text-white'
+                      : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
+                  }`}
+                >
+                  <Lock size={14} />
+                  Locked
+                </button>
+              </div>
+              <p className="text-xs text-neutral-400 mt-2">
+                When locked, visitors cannot change the size or arrangement of your gallery
+              </p>
+            </div>
+
             <div
               className="p-4 rounded-lg"
               style={{ backgroundColor }}
@@ -416,13 +468,53 @@ export default function EditGallery() {
       {step === 'arrange' && (
         <>
           <p className="text-neutral-500 text-sm mb-6">
-            Drag to reorder
+            Drag to reorder. {arrangement === 'presentation' && 'Add descriptions for presentation mode.'}
           </p>
           <SortableNFTGrid
             nfts={selectedNfts}
             onReorder={setSelectedNfts}
             onRemove={handleRemoveNft}
           />
+
+          {/* Per-NFT descriptions for presentation mode */}
+          {arrangement === 'presentation' && selectedNfts.length > 0 && (
+            <div className="mt-8 border-t pt-8">
+              <h3 className="text-lg font-medium mb-4">NFT Descriptions</h3>
+              <p className="text-sm text-neutral-500 mb-6">
+                Add personal descriptions or stories for each NFT. These will appear during the presentation.
+              </p>
+              <div className="space-y-4">
+                {selectedNfts.map((nft, index) => {
+                  const key = `${nft.collection.contractAddress}-${nft.tokenId}`;
+                  return (
+                    <div key={key} className="flex gap-4 items-start p-4 bg-neutral-50 rounded-lg">
+                      <div className="flex-shrink-0">
+                        <span className="text-sm text-neutral-400 mr-2">{index + 1}.</span>
+                        <img
+                          src={nft.thumbnail || nft.image}
+                          alt=""
+                          className="w-16 h-16 object-cover rounded"
+                        />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm font-medium mb-2">{nft.collection.name}</p>
+                        <textarea
+                          value={nftDescriptions[key] || ''}
+                          onChange={(e) => setNftDescriptions(prev => ({
+                            ...prev,
+                            [key]: e.target.value
+                          }))}
+                          placeholder="Add a description, story, or context for this NFT..."
+                          rows={2}
+                          className="w-full px-3 py-2 text-sm border border-neutral-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-neutral-200 resize-none"
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </>
       )}
     </div>

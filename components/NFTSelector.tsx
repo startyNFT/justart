@@ -1,21 +1,42 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { NFTGrid } from './NFTGrid';
 import type { NFT } from '@/lib/stargaze';
-import { Search, Filter, X } from 'lucide-react';
+import { Search, Filter, X, Loader2 } from 'lucide-react';
 
 type NFTSelectorProps = {
   nfts: NFT[];
   selectedIds: Set<string>;
   onSelect: (nft: NFT) => void;
   useThumbnails?: boolean;
+  onFilterActive?: (hasFilter: boolean) => void;
+  loading?: boolean;
+  loadingProgress?: string;
 };
 
-export function NFTSelector({ nfts, selectedIds, onSelect, useThumbnails }: NFTSelectorProps) {
+export function NFTSelector({ nfts, selectedIds, onSelect, useThumbnails, onFilterActive, loading, loadingProgress }: NFTSelectorProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCollection, setSelectedCollection] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
+
+  // Notify parent about filter state (deferred to avoid render issues)
+  const notifyFilterChange = useCallback((hasFilter: boolean) => {
+    // Use setTimeout to defer the callback to avoid React state batching issues
+    setTimeout(() => onFilterActive?.(hasFilter), 0);
+  }, [onFilterActive]);
+
+  // Helper to update search and notify parent
+  const updateSearch = (query: string) => {
+    setSearchQuery(query);
+    notifyFilterChange(query.trim() !== '' || selectedCollection !== null);
+  };
+
+  // Helper to update collection filter and notify parent
+  const updateCollection = (collection: string | null) => {
+    setSelectedCollection(collection);
+    notifyFilterChange(searchQuery.trim() !== '' || collection !== null);
+  };
 
   // Get unique collections
   const collections = useMemo(() => {
@@ -46,12 +67,13 @@ export function NFTSelector({ nfts, selectedIds, onSelect, useThumbnails }: NFTS
       );
     }
 
-    // Filter by search query
+    // Filter by search query (name, description, tokenId, collection name)
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
       result = result.filter(
         (nft) =>
           nft.name.toLowerCase().includes(query) ||
+          (nft.description && nft.description.toLowerCase().includes(query)) ||
           nft.tokenId.toLowerCase().includes(query) ||
           nft.collection.name.toLowerCase().includes(query)
       );
@@ -77,13 +99,13 @@ export function NFTSelector({ nfts, selectedIds, onSelect, useThumbnails }: NFTS
           <input
             type="text"
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => updateSearch(e.target.value)}
             placeholder="Search by name or token ID..."
             className="w-full pl-10 pr-4 py-2 border border-neutral-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-neutral-200"
           />
           {searchQuery && (
             <button
-              onClick={() => setSearchQuery('')}
+              onClick={() => updateSearch('')}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600"
             >
               <X size={16} />
@@ -119,7 +141,7 @@ export function NFTSelector({ nfts, selectedIds, onSelect, useThumbnails }: NFTS
             </span>
             {selectedCollection && (
               <button
-                onClick={() => setSelectedCollection(null)}
+                onClick={() => updateCollection(null)}
                 className="text-sm text-neutral-500 hover:text-neutral-700"
               >
                 Clear filter
@@ -131,7 +153,7 @@ export function NFTSelector({ nfts, selectedIds, onSelect, useThumbnails }: NFTS
               <button
                 key={collection.address}
                 onClick={() =>
-                  setSelectedCollection(
+                  updateCollection(
                     selectedCollection === collection.address
                       ? null
                       : collection.address
@@ -158,7 +180,7 @@ export function NFTSelector({ nfts, selectedIds, onSelect, useThumbnails }: NFTS
           <span className="inline-flex items-center gap-1 px-3 py-1 bg-neutral-100 rounded-full text-sm">
             {selectedCollectionName}
             <button
-              onClick={() => setSelectedCollection(null)}
+              onClick={() => updateCollection(null)}
               className="ml-1 text-neutral-400 hover:text-neutral-600"
             >
               <X size={14} />
@@ -169,10 +191,18 @@ export function NFTSelector({ nfts, selectedIds, onSelect, useThumbnails }: NFTS
 
       {/* Results count */}
       <div className="flex items-center justify-between mb-4">
-        <p className="text-neutral-500 text-sm">
-          {filteredNfts.length} NFTs
-          {filteredNfts.length !== nfts.length && ` (${nfts.length} total)`}
-        </p>
+        <div className="flex items-center gap-2">
+          <p className="text-neutral-500 text-sm">
+            {filteredNfts.length} NFTs
+            {filteredNfts.length !== nfts.length && ` (${nfts.length} total)`}
+          </p>
+          {loading && (
+            <div className="flex items-center gap-1.5 text-neutral-400 text-sm">
+              <Loader2 size={12} className="animate-spin" />
+              {loadingProgress && <span>{loadingProgress}</span>}
+            </div>
+          )}
+        </div>
         <p className="text-neutral-500 text-sm">
           {selectedIds.size} selected
         </p>

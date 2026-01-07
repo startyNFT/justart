@@ -20,6 +20,7 @@ export const ARRANGEMENT_OPTIONS = [
   { id: 'grid', label: 'Grid' },
   { id: 'vertical', label: 'Vertical' },
   { id: 'justified', label: 'Justified' },
+  { id: 'presentation', label: 'Presentation' },
 ] as const;
 
 export type SizeType = typeof SIZE_OPTIONS[number]['id'];

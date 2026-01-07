@@ -11,6 +11,12 @@ export type User = {
   created_at: string;
 };
 
+export type NFTItem = {
+  contract: string;
+  token_id: string;
+  description?: string; // Optional per-NFT description for presentation mode
+};
+
 export type Gallery = {
   id: string;
   user_id: string;
@@ -19,10 +25,11 @@ export type Gallery = {
   description: string | null;
   background_color: string;
   layout: string;
-  nft_ids: { contract: string; token_id: string }[];
+  nft_ids: NFTItem[];
   payment_tx_hash: string | null;
   views: number;
   show_info: boolean;
+  lock_layout: boolean; // If true, viewers cannot change size/arrangement
   created_at: string;
 };
 

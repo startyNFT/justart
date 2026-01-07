@@ -1,15 +1,16 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useChain } from '@cosmos-kit/react';
 import { NFTGrid } from '@/components/NFTGrid';
+import { PresentationView } from '@/components/PresentationView';
 import { SizePicker, ArrangementPicker } from '@/components/LayoutPicker';
-import { supabase, type Gallery } from '@/lib/supabase';
+import { supabase, type Gallery, type NFTItem } from '@/lib/supabase';
 import { fetchNFTById, fetchStargazeName, type NFT } from '@/lib/stargaze';
 import { formatNumber, isDarkColor } from '@/lib/utils';
 import type { SizeType, ArrangementType } from '@/lib/constants';
-import { Eye, Heart, Share2, Loader2, Pencil, Home, Image, LayoutGrid, Plus, Check } from 'lucide-react';
+import { Eye, Heart, Share2, Loader2, Pencil, Home, Image, LayoutGrid, Plus, Lock } from 'lucide-react';
 import Link from 'next/link';
 
 export default function GalleryView() {
@@ -20,6 +21,7 @@ export default function GalleryView() {
 
   const [gallery, setGallery] = useState<Gallery | null>(null);
   const [nfts, setNfts] = useState<NFT[]>([]);
+  const [nftDescriptions, setNftDescriptions] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [likesCount, setLikesCount] = useState(0);
   const [hasLiked, setHasLiked] = useState(false);
@@ -29,6 +31,7 @@ export default function GalleryView() {
   const [isOwner, setIsOwner] = useState(false);
   const [ownerName, setOwnerName] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [lockLayout, setLockLayout] = useState(false);
 
   const isDark = gallery ? isDarkColor(gallery.background_color) : false;
   const textColor = isDark ? 'text-white' : 'text-neutral-900';
@@ -101,8 +104,20 @@ export default function GalleryView() {
         setHasLiked(!!likeData);
       }
 
+      // Extract per-NFT descriptions
+      const descriptions: Record<string, string> = {};
+      galleryData.nft_ids.forEach((item: NFTItem) => {
+        if (item.description) {
+          descriptions[`${item.contract}-${item.token_id}`] = item.description;
+        }
+      });
+      setNftDescriptions(descriptions);
+
+      // Set lock_layout (default to false if not set)
+      setLockLayout(galleryData.lock_layout ?? false);
+
       const nftPromises = galleryData.nft_ids.map(
-        (item: { contract: string; token_id: string }) =>
+        (item: NFTItem) =>
           fetchNFTById(item.contract, item.token_id)
       );
       const nftResults = await Promise.all(nftPromises);
@@ -246,11 +261,18 @@ export default function GalleryView() {
 
           <div className={`w-px h-5 mx-4 ${isDark ? 'bg-white/30' : 'bg-black/20'}`} />
 
-          {/* Layout controls */}
-          <div className="flex items-center gap-2">
-            <SizePicker value={size} onChange={setSize} variant={isDark ? 'dark' : 'transparent'} />
-            <ArrangementPicker value={arrangement} onChange={setArrangement} variant={isDark ? 'dark' : 'transparent'} />
-          </div>
+          {/* Layout controls - hidden if locked */}
+          {lockLayout ? (
+            <div className={`flex items-center gap-1 px-2 py-1 rounded-lg ${textMuted}`} title="Layout locked by owner">
+              <Lock size={14} />
+              <span className="text-xs">Layout locked</span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <SizePicker value={size} onChange={setSize} variant={isDark ? 'dark' : 'transparent'} />
+              <ArrangementPicker value={arrangement} onChange={setArrangement} variant={isDark ? 'dark' : 'transparent'} />
+            </div>
+          )}
 
           <div className={`w-px h-5 mx-4 ${isDark ? 'bg-white/30' : 'bg-black/20'}`} />
 
@@ -285,9 +307,17 @@ export default function GalleryView() {
       </div>
 
       {/* Main content - clean art display */}
-      <div className="min-h-screen p-4 pt-16 md:p-8 md:pt-16">
-        <NFTGrid nfts={nfts} size={size} arrangement={arrangement} />
-      </div>
+      {arrangement === 'presentation' ? (
+        <PresentationView
+          nfts={nfts}
+          descriptions={nftDescriptions}
+          backgroundColor={gallery.background_color}
+        />
+      ) : (
+        <div className="min-h-screen p-4 pt-16 md:p-8 md:pt-16">
+          <NFTGrid nfts={nfts} size={size} arrangement={arrangement} />
+        </div>
+      )}
     </div>
   );
 }

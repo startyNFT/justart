@@ -134,17 +134,13 @@ export default function MyNFTs() {
     );
   }
 
-  const hiddenCount = nfts.length - displayNfts.length;
-
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
           <p className="text-sm text-neutral-400">
             {total > 0
-              ? hideDuplicates && hiddenCount > 0
-                ? `${displayNfts.length} unique (${hiddenCount} duplicates hidden)`
-                : `${total} NFTs`
+              ? `${total} NFTs`
               : loading
               ? 'Loading...'
               : 'No NFTs found'}
@@ -167,7 +163,7 @@ export default function MyNFTs() {
             <span className="hidden sm:inline">{hideDuplicates ? 'Unique' : 'All'}</span>
           </button>
           <SizePicker value={size} onChange={setSize} />
-          <ArrangementPicker value={arrangement} onChange={setArrangement} />
+          <ArrangementPicker value={arrangement} onChange={setArrangement} exclude={['presentation']} />
         </div>
       </div>
 

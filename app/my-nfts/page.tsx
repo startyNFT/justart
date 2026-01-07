@@ -5,11 +5,11 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { useChain } from '@cosmos-kit/react';
 import { NFTGrid } from '@/components/NFTGrid';
 import { SizePicker, ArrangementPicker } from '@/components/LayoutPicker';
-import { fetchNFTPage, type NFT } from '@/lib/stargaze';
+import { fetchNFTPage, PAGE_SIZE, type NFT } from '@/lib/stargaze';
 import type { SizeType, ArrangementType } from '@/lib/constants';
 import { Wallet, Loader2, ChevronLeft, ChevronRight, Layers } from 'lucide-react';
 
-const ITEMS_PER_PAGE = 50;
+const ITEMS_PER_PAGE = PAGE_SIZE; // Use larger batch for faster loading
 
 export default function MyNFTs() {
   const router = useRouter();

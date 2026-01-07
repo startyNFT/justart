@@ -35,7 +35,7 @@ export async function fetchStargazeName(walletAddress: string): Promise<string |
 // Image size options
 export type ImageSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl' | 'full';
 
-// Transform Stargaze IPFS URLs to use IPFS gateway
+// Transform Stargaze IPFS URLs to use fast IPFS gateway
 function transformIpfsUrl(url: string): string {
   if (!url) return '';
 
@@ -51,7 +51,8 @@ function transformIpfsUrl(url: string): string {
   }
 
   if (ipfsHash) {
-    return `https://ipfs.io/ipfs/${ipfsHash}`;
+    // Use Cloudflare's fast IPFS gateway
+    return `https://cf-ipfs.com/ipfs/${ipfsHash}`;
   }
 
   return url;
@@ -218,7 +219,7 @@ function setCachedPage(walletAddress: string, offset: number, data: NFT[]) {
   }
 }
 
-export const PAGE_SIZE = 30;
+export const PAGE_SIZE = 100; // Larger batches for faster loading
 
 const nftQuery = `
   query TokensOwned($owner: String!, $limit: Int, $offset: Int) {
@@ -273,12 +274,22 @@ async function fetchWithRetry(
   throw lastError || new Error('Fetch failed after retries');
 }
 
-// Fetch a single page of NFTs
+// Fetch a single page of NFTs with caching
 export async function fetchNFTPage(
   walletAddress: string,
   offset: number = 0,
   limit: number = PAGE_SIZE
 ): Promise<{ nfts: NFT[]; total: number; hasMore: boolean }> {
+  // Check cache first
+  const cached = getCachedPage(walletAddress, offset);
+  if (cached && cached.length > 0) {
+    // Return cached data immediately, but we don't know total from cache
+    // so we'll need to fetch fresh for total count on first page
+    if (offset > 0) {
+      return { nfts: cached, total: 0, hasMore: true };
+    }
+  }
+
   try {
     const response = await fetchWithRetry(STARGAZE_GRAPHQL, {
       method: 'POST',
@@ -293,7 +304,7 @@ export async function fetchNFTPage(
     if (!data?.data?.tokens?.tokens) {
       // Empty response - retry once more after delay
       console.warn('Empty response from API, retrying...');
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      await new Promise(resolve => setTimeout(resolve, 1000));
 
       const retryResponse = await fetchWithRetry(STARGAZE_GRAPHQL, {
         method: 'POST',
@@ -311,17 +322,50 @@ export async function fetchNFTPage(
 
       const total = retryData.data.tokens.pageInfo.total;
       const nfts = retryData.data.tokens.tokens.map(mapTokenToNFT);
+      setCachedPage(walletAddress, offset, nfts);
       return { nfts, total, hasMore: offset + nfts.length < total };
     }
 
     const total = data.data.tokens.pageInfo.total;
     const nfts = data.data.tokens.tokens.map(mapTokenToNFT);
 
+    // Cache the results
+    setCachedPage(walletAddress, offset, nfts);
+
     return { nfts, total, hasMore: offset + nfts.length < total };
   } catch (error) {
     console.error('Error fetching NFTs:', error);
     return { nfts: [], total: 0, hasMore: false };
   }
+}
+
+// Fetch multiple pages in parallel for faster loading
+export async function fetchNFTsParallel(
+  walletAddress: string,
+  total: number,
+  startOffset: number = 0,
+  concurrency: number = 3
+): Promise<NFT[]> {
+  const allNfts: NFT[] = [];
+  const pageOffsets: number[] = [];
+
+  // Generate offsets for remaining pages
+  for (let offset = startOffset; offset < total; offset += PAGE_SIZE) {
+    pageOffsets.push(offset);
+  }
+
+  // Fetch in parallel batches
+  for (let i = 0; i < pageOffsets.length; i += concurrency) {
+    const batch = pageOffsets.slice(i, i + concurrency);
+    const results = await Promise.all(
+      batch.map(offset => fetchNFTPage(walletAddress, offset, PAGE_SIZE))
+    );
+    results.forEach(result => {
+      allNfts.push(...result.nfts);
+    });
+  }
+
+  return allNfts;
 }
 
 // Prefetch next pages aggressively

@@ -8,7 +8,7 @@ import { NFTSelector } from '@/components/NFTSelector';
 import { SortableNFTGrid } from '@/components/SortableNFTGrid';
 import { SizePicker, ArrangementPicker } from '@/components/LayoutPicker';
 import { ColorPicker } from '@/components/ColorPicker';
-import { fetchNFTPage, type NFT } from '@/lib/stargaze';
+import { fetchNFTPage, fetchNFTsParallel, PAGE_SIZE, type NFT } from '@/lib/stargaze';
 import { supabase } from '@/lib/supabase';
 import { generateSlug } from '@/lib/utils';
 import { TREASURY_WALLET } from '@/lib/constants';
@@ -18,7 +18,7 @@ import { Wallet, Loader2, ArrowRight, ArrowLeft, Layers, Gift, Lock, Unlock } fr
 
 type Step = 'select' | 'arrange' | 'customize';
 
-const ITEMS_PER_PAGE = 50;
+const ITEMS_PER_PAGE = PAGE_SIZE; // Use larger batch size for faster loading
 
 export default function CreateGallery() {
   const router = useRouter();
@@ -59,7 +59,7 @@ export default function CreateGallery() {
     selectedNfts.map((nft) => `${nft.collection.contractAddress}-${nft.tokenId}`)
   );
 
-  // Load ALL NFTs progressively
+  // Load ALL NFTs with parallel fetching for blazing fast speed
   useEffect(() => {
     if (!address) return;
 
@@ -77,7 +77,7 @@ export default function CreateGallery() {
 
       if (firstResult.nfts.length === 0) {
         // Retry once if no results
-        await new Promise(resolve => setTimeout(resolve, 1500));
+        await new Promise(resolve => setTimeout(resolve, 1000));
         const retryResult = await fetchNFTPage(address!, 0, ITEMS_PER_PAGE);
         if (retryResult.nfts.length === 0) {
           setLoading(false);
@@ -95,50 +95,45 @@ export default function CreateGallery() {
       }
 
       const total = firstResult.total;
-      let loadedCount = firstResult.nfts.length;
+      const firstBatchCount = firstResult.nfts.length;
 
-      // Load remaining pages
-      while (loadedCount < total && !cancelled) {
-        setLoadingProgress(`Loading ${loadedCount} / ${total} NFTs...`);
+      // If there's more to load, use parallel fetching
+      if (firstBatchCount < total && !cancelled) {
+        setLoadingProgress(`Loading ${firstBatchCount} / ${total} NFTs...`);
 
-        const result = await fetchNFTPage(address!, loadedCount, ITEMS_PER_PAGE);
-        if (cancelled) return;
+        // Fetch remaining pages in parallel (3 at a time for speed)
+        const remainingNfts = await fetchNFTsParallel(address!, total, firstBatchCount, 3);
 
-        if (result.nfts.length === 0) break;
-
-        setAllNfts(prev => [...prev, ...result.nfts]);
-        loadedCount += result.nfts.length;
-
-        if (!result.hasMore) break;
+        if (!cancelled) {
+          setAllNfts(prev => [...prev, ...remainingNfts]);
+        }
       }
 
       setLoading(false);
       setLoadingProgress('');
 
-      // Load user data and check payments
-      const { data: user } = await supabase
-        .from('users')
-        .select('id')
-        .eq('wallet_address', address!)
-        .single();
+      // Load user data and check payments in parallel
+      const [userResult, paymentInfo] = await Promise.all([
+        supabase
+          .from('users')
+          .select('id')
+          .eq('wallet_address', address!)
+          .single(),
+        fetchPaymentsToTreasury(address!).catch(err => {
+          console.error('Error checking past payments:', err);
+          return { paidSlots: 1 };
+        })
+      ]);
 
-      if (user) {
+      if (userResult.data) {
         const { count } = await supabase
           .from('galleries')
           .select('*', { count: 'exact', head: true })
-          .eq('user_id', user.id);
+          .eq('user_id', userResult.data.id);
         setGalleryCount(count || 0);
       }
 
-      // Check for past payments
-      setCheckingPayments(true);
-      try {
-        const paymentInfo = await fetchPaymentsToTreasury(address!);
-        setPaidSlots(paymentInfo.paidSlots);
-      } catch (err) {
-        console.error('Error checking past payments:', err);
-      }
-      setCheckingPayments(false);
+      setPaidSlots(paymentInfo.paidSlots);
     }
 
     loadAllNfts();

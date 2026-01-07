@@ -1,17 +1,18 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useChain } from '@cosmos-kit/react';
 import { NFTGrid } from '@/components/NFTGrid';
+import { NFTSelector } from '@/components/NFTSelector';
 import { SortableNFTGrid } from '@/components/SortableNFTGrid';
-import { LayoutPicker } from '@/components/LayoutPicker';
+import { SizePicker, ArrangementPicker } from '@/components/LayoutPicker';
 import { ColorPicker } from '@/components/ColorPicker';
-import { fetchUserNFTs, type NFT } from '@/lib/stargaze';
+import { fetchNFTPage, prefetchNFTPages, PAGE_SIZE, type NFT } from '@/lib/stargaze';
 import { supabase } from '@/lib/supabase';
 import { calculateGalleryPrice, generateSlug } from '@/lib/utils';
 import { TREASURY_WALLET } from '@/lib/constants';
-import type { LayoutType } from '@/lib/constants';
+import type { SizeType, ArrangementType } from '@/lib/constants';
 import { Wallet, Loader2, ArrowRight, ArrowLeft } from 'lucide-react';
 
 type Step = 'select' | 'arrange' | 'customize';
@@ -23,33 +24,58 @@ export default function CreateGallery() {
   const [step, setStep] = useState<Step>('select');
   const [nfts, setNfts] = useState<NFT[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [total, setTotal] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
   const [creating, setCreating] = useState(false);
 
   const [selectedNfts, setSelectedNfts] = useState<NFT[]>([]);
-  const [layout, setLayout] = useState<LayoutType>('medium');
+  const [size, setSize] = useState<SizeType>('medium');
+  const [arrangement, setArrangement] = useState<ArrangementType>('grid');
   const [backgroundColor, setBackgroundColor] = useState('#FFFFFF');
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [showInfo, setShowInfo] = useState(true);
 
   const [galleryCount, setGalleryCount] = useState(0);
   const price = calculateGalleryPrice(galleryCount);
+
+  const loadMoreRef = useRef<HTMLDivElement>(null);
+  const currentOffset = useRef(0);
 
   const selectedIds = new Set(
     selectedNfts.map((nft) => `${nft.collection.contractAddress}-${nft.tokenId}`)
   );
 
+  // Initial load with retry
   useEffect(() => {
     if (!address) return;
 
-    async function load() {
+    async function load(retryCount = 0) {
       setLoading(true);
+      currentOffset.current = 0;
 
       const [nftResult, userResult] = await Promise.all([
-        fetchUserNFTs(address),
-        supabase.from('users').select('id').eq('wallet_address', address).single(),
+        fetchNFTPage(address!, 0),
+        supabase.from('users').select('id').eq('wallet_address', address!).single(),
       ]);
 
+      // Retry if we got no NFTs
+      if (nftResult.nfts.length === 0 && retryCount < 3) {
+        console.warn(`Got 0 NFTs, retrying (attempt ${retryCount + 1})...`);
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        return load(retryCount + 1);
+      }
+
       setNfts(nftResult.nfts);
+      setTotal(nftResult.total);
+      setHasMore(nftResult.hasMore);
+      currentOffset.current = PAGE_SIZE;
+
+      // Prefetch next pages
+      if (nftResult.hasMore) {
+        prefetchNFTPages(address!, 0, nftResult.total);
+      }
 
       if (userResult.data) {
         const { count } = await supabase
@@ -64,6 +90,41 @@ export default function CreateGallery() {
 
     load();
   }, [address]);
+
+  // Load more function
+  const loadMore = useCallback(async () => {
+    if (!address || loadingMore || !hasMore) return;
+
+    setLoadingMore(true);
+    const result = await fetchNFTPage(address, currentOffset.current);
+
+    setNfts(prev => [...prev, ...result.nfts]);
+    setHasMore(result.hasMore);
+    currentOffset.current += PAGE_SIZE;
+
+    if (result.hasMore) {
+      prefetchNFTPages(address, currentOffset.current, result.total);
+    }
+
+    setLoadingMore(false);
+  }, [address, loadingMore, hasMore]);
+
+  // Intersection observer for infinite scroll
+  useEffect(() => {
+    if (!loadMoreRef.current || step !== 'select') return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasMore && !loadingMore && !loading) {
+          loadMore();
+        }
+      },
+      { rootMargin: '400px' }
+    );
+
+    observer.observe(loadMoreRef.current);
+    return () => observer.disconnect();
+  }, [hasMore, loadingMore, loading, loadMore, step]);
 
   const handleSelectNft = (nft: NFT) => {
     const key = `${nft.collection.contractAddress}-${nft.tokenId}`;
@@ -129,6 +190,7 @@ export default function CreateGallery() {
       }));
 
       const slug = generateSlug();
+      const layout = `${size}-${arrangement}`;
 
       const { error } = await supabase.from('galleries').insert({
         user_id: userId,
@@ -139,6 +201,7 @@ export default function CreateGallery() {
         layout,
         nft_ids: nftIds,
         payment_tx_hash: txHash,
+        show_info: showInfo,
       });
 
       if (error) throw error;
@@ -200,8 +263,11 @@ export default function CreateGallery() {
       {step === 'select' && (
         <>
           <div className="flex items-center justify-between mb-6">
-            <p className="text-neutral-500">
-              {selectedNfts.length} selected
+            <p className="text-sm text-neutral-400">
+              {nfts.length > 0
+                ? `${nfts.length}${total > nfts.length ? ` / ${total}` : ''} NFTs`
+                : 'No NFTs found'}
+              {selectedNfts.length > 0 && ` • ${selectedNfts.length} selected`}
             </p>
             <button
               onClick={() => setStep('arrange')}
@@ -212,13 +278,18 @@ export default function CreateGallery() {
               <ArrowRight size={18} />
             </button>
           </div>
-          <NFTGrid
+          <NFTSelector
             nfts={nfts}
-            layout="medium"
-            selectable
             selectedIds={selectedIds}
             onSelect={handleSelectNft}
+            useThumbnails
           />
+          {/* Infinite scroll trigger */}
+          <div ref={loadMoreRef} className="h-20 flex items-center justify-center">
+            {loadingMore && (
+              <Loader2 size={24} className="text-neutral-400 animate-spin" />
+            )}
+          </div>
         </>
       )}
 
@@ -290,9 +361,16 @@ export default function CreateGallery() {
 
             <div>
               <label className="block text-sm font-medium text-neutral-700 mb-2">
-                Layout
+                Size
               </label>
-              <LayoutPicker value={layout} onChange={setLayout} />
+              <SizePicker value={size} onChange={setSize} />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-neutral-700 mb-2">
+                Arrangement
+              </label>
+              <ArrangementPicker value={arrangement} onChange={setArrangement} />
             </div>
 
             <div>
@@ -302,12 +380,43 @@ export default function CreateGallery() {
               <ColorPicker value={backgroundColor} onChange={setBackgroundColor} />
             </div>
 
+            <div>
+              <label className="block text-sm font-medium text-neutral-700 mb-2">
+                Gallery Info Visibility
+              </label>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setShowInfo(true)}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    showInfo
+                      ? 'bg-neutral-900 text-white'
+                      : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
+                  }`}
+                >
+                  Always Show
+                </button>
+                <button
+                  onClick={() => setShowInfo(false)}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    !showInfo
+                      ? 'bg-neutral-900 text-white'
+                      : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
+                  }`}
+                >
+                  Show on Hover
+                </button>
+              </div>
+              <p className="text-xs text-neutral-400 mt-2">
+                Controls whether gallery title, owner, and stats are visible by default or only on hover
+              </p>
+            </div>
+
             <div
               className="p-4 rounded-lg"
               style={{ backgroundColor }}
             >
               <p className="text-sm text-neutral-500 mb-3">Preview</p>
-              <NFTGrid nfts={selectedNfts.slice(0, 6)} layout={layout} />
+              <NFTGrid nfts={selectedNfts.slice(0, 6)} size={size} arrangement={arrangement} />
             </div>
 
             <div className="pt-4 border-t border-neutral-100">

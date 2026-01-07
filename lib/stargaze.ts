@@ -3,11 +3,76 @@ import { STARGAZE_GRAPHQL } from './constants';
 
 const client = new GraphQLClient(STARGAZE_GRAPHQL);
 
+// Fetch Stargaze Name for a wallet address
+const NAME_QUERY = gql`
+  query Name($address: String!) {
+    names(ownerAddr: $address) {
+      names {
+        name
+      }
+    }
+  }
+`;
+
+export async function fetchStargazeName(walletAddress: string): Promise<string | null> {
+  try {
+    const data = await client.request<{
+      names: {
+        names: Array<{ name: string }>;
+      };
+    }>(NAME_QUERY, { address: walletAddress });
+
+    if (data.names.names.length > 0) {
+      return data.names.names[0].name;
+    }
+    return null;
+  } catch (error) {
+    console.error('Error fetching Stargaze name:', error);
+    return null;
+  }
+}
+
+// Image size options
+export type ImageSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl' | 'full';
+
+// Transform Stargaze IPFS URLs to use IPFS gateway
+function transformIpfsUrl(url: string): string {
+  if (!url) return '';
+
+  let ipfsHash = '';
+
+  // Extract IPFS hash from various URL formats
+  if (url.includes('ipfs-gw.stargaze-apis.com/ipfs/')) {
+    ipfsHash = url.split('ipfs-gw.stargaze-apis.com/ipfs/')[1]?.split('?')[0] || '';
+  } else if (url.startsWith('ipfs://')) {
+    ipfsHash = url.replace('ipfs://', '');
+  } else if (url.includes('/ipfs/')) {
+    ipfsHash = url.split('/ipfs/')[1]?.split('?')[0] || '';
+  }
+
+  if (ipfsHash) {
+    return `https://ipfs.io/ipfs/${ipfsHash}`;
+  }
+
+  return url;
+}
+
+// Get image URL (size param kept for API compatibility but not used)
+export function getOptimizedImageUrl(url: string, _size: ImageSize = 'md'): string {
+  if (!url) return '';
+  if (url.startsWith('data:')) return url;
+  return transformIpfsUrl(url);
+}
+
 export type NFT = {
   tokenId: string;
   name: string;
   description: string;
   image: string;
+  thumbnail?: string; // Optimized smaller image for grid views
+  animationUrl?: string;
+  audioUrl?: string;
+  mediaType?: 'image' | 'video' | 'audio';
   collection: {
     contractAddress: string;
     name: string;
@@ -25,6 +90,7 @@ const TOKENS_QUERY = gql`
           url
           type
         }
+        metadata
         collection {
           contractAddress
           name
@@ -39,38 +105,239 @@ const TOKENS_QUERY = gql`
   }
 `;
 
-export async function fetchUserNFTs(
-  walletAddress: string,
-  limit = 50,
-  offset = 0
-): Promise<{ nfts: NFT[]; total: number }> {
+// Helper to map token data to NFT type
+function mapTokenToNFT(token: {
+  tokenId: string;
+  name: string;
+  description: string;
+  media: {
+    url: string;
+    type: string;
+    visualAssets?: {
+      lg?: { url: string };
+      md?: { url: string };
+      sm?: { url: string };
+    };
+  } | null;
+  metadata: Record<string, unknown> | null;
+  collection: { contractAddress: string; name: string };
+}): NFT {
+  const rawMediaType = token.media?.type || '';
+  const animationUrl = token.metadata?.animation_url as string | undefined;
+
+  // Determine media type
+  let mediaType: 'image' | 'video' | 'audio' = 'image';
+  let audioUrl: string | undefined;
+  let videoUrl: string | undefined;
+
+  if (rawMediaType.includes('audio')) {
+    mediaType = 'audio';
+    audioUrl = token.media?.url;
+  } else if (rawMediaType.includes('video')) {
+    mediaType = 'video';
+    videoUrl = token.media?.url || animationUrl;
+  } else if (animationUrl?.includes('.mp4') || animationUrl?.includes('.webm')) {
+    mediaType = 'video';
+    videoUrl = animationUrl;
+  }
+
+  // Get image URL - check multiple sources
+  let imageUrl = '';
+
+  // For audio/html/unknown types, media.url is not the image - check metadata first
+  const isNonImageMedia = rawMediaType.includes('audio') || rawMediaType.includes('html') || rawMediaType === 'unknown';
+  if (isNonImageMedia) {
+    // Try metadata image sources first for non-image media types
+    if (token.metadata?.image) {
+      imageUrl = token.metadata.image as string;
+    } else if (token.metadata?.image_data) {
+      imageUrl = token.metadata.image_data as string;
+    }
+  }
+
+  // Standard image from media.url (only for actual image types)
+  if (!imageUrl && token.media?.url && !isNonImageMedia) {
+    imageUrl = token.media.url;
+  }
+
+  // Fallbacks for any type
+  if (!imageUrl && token.metadata?.image) {
+    imageUrl = token.metadata.image as string;
+  }
+  if (!imageUrl && token.metadata?.image_data) {
+    imageUrl = token.metadata.image_data as string;
+  }
+
+  // Get optimized thumbnail from visualAssets (use medium size - 512px)
+  // Skip thumbnail for GIFs to preserve animation
+  const isGif = imageUrl.toLowerCase().includes('.gif') || rawMediaType.includes('gif');
+  const thumbnail = isGif ? undefined : (token.media?.visualAssets?.md?.url || token.media?.visualAssets?.lg?.url);
+
+  return {
+    tokenId: token.tokenId,
+    name: token.name || `#${token.tokenId}`,
+    description: token.description || '',
+    image: imageUrl.startsWith('data:') ? imageUrl : transformIpfsUrl(imageUrl),
+    thumbnail: thumbnail || undefined,
+    animationUrl: videoUrl ? transformIpfsUrl(videoUrl) : (animationUrl ? transformIpfsUrl(animationUrl) : undefined),
+    audioUrl: audioUrl ? transformIpfsUrl(audioUrl) : undefined,
+    mediaType,
+    collection: token.collection,
+  };
+}
+
+// Cache helpers
+const CACHE_KEY_PREFIX = 'justart_nfts_page_';
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+function getCachedPage(walletAddress: string, offset: number): NFT[] | null {
+  if (typeof window === 'undefined') return null;
   try {
-    const data = await client.request<{
-      tokens: {
-        tokens: Array<{
-          tokenId: string;
-          name: string;
-          description: string;
-          media: { url: string; type: string } | null;
-          collection: { contractAddress: string; name: string };
-        }>;
-        pageInfo: { total: number; offset: number; limit: number };
-      };
-    }>(TOKENS_QUERY, { owner: walletAddress, limit, offset });
+    const cached = localStorage.getItem(`${CACHE_KEY_PREFIX}${walletAddress}_${offset}`);
+    if (!cached) return null;
+    const { data, timestamp } = JSON.parse(cached);
+    if (Date.now() - timestamp > CACHE_TTL) {
+      localStorage.removeItem(`${CACHE_KEY_PREFIX}${walletAddress}_${offset}`);
+      return null;
+    }
+    return data;
+  } catch {
+    return null;
+  }
+}
 
-    const nfts: NFT[] = data.tokens.tokens.map((token) => ({
-      tokenId: token.tokenId,
-      name: token.name || `#${token.tokenId}`,
-      description: token.description || '',
-      image: token.media?.url || '',
-      collection: token.collection,
+function setCachedPage(walletAddress: string, offset: number, data: NFT[]) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(`${CACHE_KEY_PREFIX}${walletAddress}_${offset}`, JSON.stringify({
+      data,
+      timestamp: Date.now(),
     }));
+  } catch {
+    // Storage full or unavailable
+  }
+}
 
-    return { nfts, total: data.tokens.pageInfo.total };
+export const PAGE_SIZE = 30;
+
+const nftQuery = `
+  query TokensOwned($owner: String!, $limit: Int, $offset: Int) {
+    tokens(ownerAddrOrName: $owner, limit: $limit, offset: $offset) {
+      tokens {
+        tokenId
+        name
+        media {
+          url
+          type
+          visualAssets {
+            lg { url }
+            md { url }
+            sm { url }
+          }
+        }
+        metadata
+        collection { contractAddress name }
+      }
+      pageInfo { total }
+    }
+  }
+`;
+
+// Helper to fetch with retries
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit,
+  maxRetries: number = 3,
+  delay: number = 1000
+): Promise<Response> {
+  let lastError: Error | null = null;
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      const response = await fetch(url, options);
+      if (response.ok) {
+        return response;
+      }
+      // If not ok, throw to trigger retry
+      throw new Error(`HTTP ${response.status}`);
+    } catch (error) {
+      lastError = error as Error;
+      console.warn(`Fetch attempt ${attempt + 1} failed, retrying in ${delay}ms...`);
+      if (attempt < maxRetries - 1) {
+        await new Promise(resolve => setTimeout(resolve, delay));
+        delay *= 1.5; // Exponential backoff
+      }
+    }
+  }
+
+  throw lastError || new Error('Fetch failed after retries');
+}
+
+// Fetch a single page of NFTs
+export async function fetchNFTPage(
+  walletAddress: string,
+  offset: number = 0,
+  limit: number = PAGE_SIZE
+): Promise<{ nfts: NFT[]; total: number; hasMore: boolean }> {
+  try {
+    const response = await fetchWithRetry(STARGAZE_GRAPHQL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        query: nftQuery,
+        variables: { owner: walletAddress, limit, offset }
+      })
+    });
+    const data = await response.json();
+
+    if (!data?.data?.tokens?.tokens) {
+      // Empty response - retry once more after delay
+      console.warn('Empty response from API, retrying...');
+      await new Promise(resolve => setTimeout(resolve, 1500));
+
+      const retryResponse = await fetchWithRetry(STARGAZE_GRAPHQL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: nftQuery,
+          variables: { owner: walletAddress, limit, offset }
+        })
+      });
+      const retryData = await retryResponse.json();
+
+      if (!retryData?.data?.tokens?.tokens) {
+        return { nfts: [], total: 0, hasMore: false };
+      }
+
+      const total = retryData.data.tokens.pageInfo.total;
+      const nfts = retryData.data.tokens.tokens.map(mapTokenToNFT);
+      return { nfts, total, hasMore: offset + nfts.length < total };
+    }
+
+    const total = data.data.tokens.pageInfo.total;
+    const nfts = data.data.tokens.tokens.map(mapTokenToNFT);
+
+    return { nfts, total, hasMore: offset + nfts.length < total };
   } catch (error) {
     console.error('Error fetching NFTs:', error);
-    return { nfts: [], total: 0 };
+    return { nfts: [], total: 0, hasMore: false };
   }
+}
+
+// Prefetch next pages aggressively
+export function prefetchNFTPages(walletAddress: string, currentOffset: number, total: number) {
+  // Prefetch next 3 pages
+  const pagesToPrefetch = [1, 2, 3];
+  pagesToPrefetch.forEach(i => {
+    const nextOffset = currentOffset + (i * PAGE_SIZE);
+    if (nextOffset < total) {
+      // Check if already cached
+      if (!getCachedPage(walletAddress, nextOffset)) {
+        // Fetch in background
+        fetchNFTPage(walletAddress, nextOffset);
+      }
+    }
+  });
 }
 
 const TOKEN_BY_ID_QUERY = gql`
@@ -82,7 +349,13 @@ const TOKEN_BY_ID_QUERY = gql`
       media {
         url
         type
+        visualAssets {
+          lg { url }
+          md { url }
+          sm { url }
+        }
       }
+      metadata
       collection {
         contractAddress
         name
@@ -101,18 +374,80 @@ export async function fetchNFTById(
         tokenId: string;
         name: string;
         description: string;
-        media: { url: string; type: string } | null;
+        media: {
+          url: string;
+          type: string;
+          visualAssets?: {
+            lg?: { url: string };
+            md?: { url: string };
+            sm?: { url: string };
+          };
+        } | null;
+        metadata: Record<string, unknown> | null;
         collection: { contractAddress: string; name: string };
       } | null;
     }>(TOKEN_BY_ID_QUERY, { collectionAddr: contractAddress, tokenId });
 
     if (!data.token) return null;
 
+    const rawMediaType = data.token.media?.type || '';
+    const animationUrl = data.token.metadata?.animation_url as string | undefined;
+
+    // Determine media type
+    let mediaType: 'image' | 'video' | 'audio' = 'image';
+    let audioUrl: string | undefined;
+    let videoUrl: string | undefined;
+
+    if (rawMediaType.includes('audio')) {
+      mediaType = 'audio';
+      audioUrl = data.token.media?.url;
+    } else if (rawMediaType.includes('video')) {
+      mediaType = 'video';
+      videoUrl = data.token.media?.url || animationUrl;
+    } else if (animationUrl?.includes('.mp4') || animationUrl?.includes('.webm')) {
+      mediaType = 'video';
+      videoUrl = animationUrl;
+    }
+
+    // Get image URL - check multiple sources
+    let imageUrl = '';
+
+    // For audio/html/unknown types, media.url is not the image
+    const isNonImageMedia = rawMediaType.includes('audio') || rawMediaType.includes('html') || rawMediaType === 'unknown';
+    if (isNonImageMedia) {
+      if (data.token.metadata?.image) {
+        imageUrl = data.token.metadata.image as string;
+      } else if (data.token.metadata?.image_data) {
+        imageUrl = data.token.metadata.image_data as string;
+      }
+    }
+
+    // Standard image from media.url (only for actual image types)
+    if (!imageUrl && data.token.media?.url && !isNonImageMedia) {
+      imageUrl = data.token.media.url;
+    }
+
+    // Fallbacks
+    if (!imageUrl && data.token.metadata?.image) {
+      imageUrl = data.token.metadata.image as string;
+    }
+    if (!imageUrl && data.token.metadata?.image_data) {
+      imageUrl = data.token.metadata.image_data as string;
+    }
+
+    // Get optimized thumbnail from visualAssets (skip for GIFs to preserve animation)
+    const isGif = imageUrl.toLowerCase().includes('.gif') || rawMediaType.includes('gif');
+    const thumbnail = isGif ? undefined : (data.token.media?.visualAssets?.md?.url || data.token.media?.visualAssets?.lg?.url);
+
     return {
       tokenId: data.token.tokenId,
       name: data.token.name || `#${data.token.tokenId}`,
       description: data.token.description || '',
-      image: data.token.media?.url || '',
+      image: imageUrl.startsWith('data:') ? imageUrl : transformIpfsUrl(imageUrl),
+      thumbnail: thumbnail || undefined,
+      animationUrl: videoUrl ? transformIpfsUrl(videoUrl) : (animationUrl ? transformIpfsUrl(animationUrl) : undefined),
+      audioUrl: audioUrl ? transformIpfsUrl(audioUrl) : undefined,
+      mediaType,
       collection: data.token.collection,
     };
   } catch (error) {

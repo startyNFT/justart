@@ -1,18 +1,20 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { useChain } from '@cosmos-kit/react';
 import { NFTGrid } from '@/components/NFTGrid';
-import { LayoutPicker } from '@/components/LayoutPicker';
+import { SizePicker, ArrangementPicker } from '@/components/LayoutPicker';
 import { supabase, type Gallery } from '@/lib/supabase';
-import { fetchNFTById, type NFT } from '@/lib/stargaze';
-import { formatNumber } from '@/lib/utils';
-import type { LayoutType } from '@/lib/constants';
-import { Eye, Heart, Share2, Loader2 } from 'lucide-react';
+import { fetchNFTById, fetchStargazeName, type NFT } from '@/lib/stargaze';
+import { formatNumber, isDarkColor } from '@/lib/utils';
+import type { SizeType, ArrangementType } from '@/lib/constants';
+import { Eye, Heart, Share2, Loader2, Pencil, Home, Image, LayoutGrid, Plus, Check } from 'lucide-react';
+import Link from 'next/link';
 
 export default function GalleryView() {
   const params = useParams();
+  const router = useRouter();
   const slug = params.slug as string;
   const { address } = useChain('stargaze');
 
@@ -22,23 +24,61 @@ export default function GalleryView() {
   const [likesCount, setLikesCount] = useState(0);
   const [hasLiked, setHasLiked] = useState(false);
   const [liking, setLiking] = useState(false);
-  const [layout, setLayout] = useState<LayoutType>('medium');
+  const [size, setSize] = useState<SizeType>('medium');
+  const [arrangement, setArrangement] = useState<ArrangementType>('grid');
+  const [isOwner, setIsOwner] = useState(false);
+  const [ownerName, setOwnerName] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const isDark = gallery ? isDarkColor(gallery.background_color) : false;
+  const textColor = isDark ? 'text-white' : 'text-neutral-900';
+  const textMuted = isDark ? 'text-white/70' : 'text-neutral-500';
+  const bgPanel = isDark ? 'bg-black/70' : 'bg-white/70';
+  const borderColor = isDark ? 'border-white/10' : 'border-black/10';
 
   useEffect(() => {
     async function load() {
       const { data: galleryData, error } = await supabase
         .from('galleries')
-        .select('*')
+        .select('*, users(wallet_address)')
         .eq('slug', slug)
         .single();
 
       if (error || !galleryData) {
+        console.error('Error loading gallery:', error);
         setLoading(false);
         return;
       }
 
       setGallery(galleryData);
-      setLayout(galleryData.layout as LayoutType);
+
+      // Fetch owner's Stargaze name
+      const ownerAddress = galleryData.users?.wallet_address;
+      if (ownerAddress) {
+        const name = await fetchStargazeName(ownerAddress);
+        setOwnerName(name);
+
+        if (address && ownerAddress === address) {
+          setIsOwner(true);
+        }
+      }
+
+      // Parse stored layout
+      const storedLayout = galleryData.layout || 'medium-grid';
+      if (storedLayout.includes('-')) {
+        const [s, a] = storedLayout.split('-');
+        setSize(s as SizeType);
+        setArrangement(a as ArrangementType);
+      } else {
+        if (['small', 'medium', 'large'].includes(storedLayout)) {
+          setSize(storedLayout as SizeType);
+          setArrangement('grid');
+        } else if (storedLayout === 'horizontal' || storedLayout === 'vertical') {
+          setArrangement('vertical');
+        } else if (storedLayout === 'grid') {
+          setArrangement('grid');
+        }
+      }
 
       await supabase
         .from('galleries')
@@ -104,13 +144,9 @@ export default function GalleryView() {
   };
 
   const handleShare = async () => {
-    const url = window.location.href;
-    if (navigator.share) {
-      await navigator.share({ title: gallery?.name, url });
-    } else {
-      await navigator.clipboard.writeText(url);
-      alert('Link copied to clipboard!');
-    }
+    await navigator.clipboard.writeText(window.location.href);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   if (loading) {
@@ -129,55 +165,128 @@ export default function GalleryView() {
     );
   }
 
+  const showInfoByDefault = gallery.show_info ?? true;
+
   return (
     <div
-      className="min-h-screen"
+      className="min-h-screen relative"
       style={{ backgroundColor: gallery.background_color }}
     >
-      <div className="max-w-7xl mx-auto px-4 py-8">
-        <div className="flex items-start justify-between mb-8">
-          <div>
-            <h1 className="text-2xl font-medium text-neutral-900">
-              {gallery.name}
-            </h1>
-            {gallery.description && (
-              <p className="mt-1 text-neutral-500 max-w-xl">
-                {gallery.description}
-              </p>
-            )}
-          </div>
+      {/* Fixed control bar */}
+      <div
+        className={`
+          fixed top-0 left-0 right-0 z-50
+          flex items-center justify-between gap-4 px-4 py-3
+          ${bgPanel} border-b ${borderColor}
+          group
+        `}
+      >
+        {/* Left side - Home always visible, info based on setting */}
+        <div className="flex items-center gap-3">
+          {/* Home icon - always visible */}
+          <Link href="/" className={`p-1.5 rounded-full hover:bg-black/10 ${textMuted}`} title="Home">
+            <Home size={18} />
+          </Link>
 
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-3 text-neutral-500 text-sm">
+          {/* Gallery info - visible based on show_info setting OR on hover */}
+          <div className={`
+            flex items-center gap-3
+            ${showInfoByDefault ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}
+            transition-opacity duration-500
+          `}>
+            <div className={`w-px h-5 ${isDark ? 'bg-white/20' : 'bg-black/10'}`} />
+            <div className="flex items-center gap-2">
+              <span className={`text-sm font-medium ${textColor} max-w-[300px] truncate`}>
+                {gallery.name}
+              </span>
+              {ownerName && (
+                <span className={`text-xs ${textMuted}`}>by {ownerName}</span>
+              )}
+            </div>
+            <div className={`w-px h-5 ${isDark ? 'bg-white/20' : 'bg-black/10'}`} />
+            <div className={`flex items-center gap-3 text-sm ${textMuted}`}>
               <span className="flex items-center gap-1">
-                <Eye size={16} />
+                <Eye size={14} />
                 {formatNumber(gallery.views + 1)}
               </span>
               <button
                 onClick={handleLike}
                 disabled={!address || liking}
-                className={`flex items-center gap-1 transition-colors ${
-                  hasLiked ? 'text-red-500' : 'hover:text-red-500'
-                } disabled:opacity-50`}
+                className={`flex items-center gap-1 transition-colors ${hasLiked ? 'text-red-500' : ''} disabled:opacity-50`}
               >
-                <Heart size={16} fill={hasLiked ? 'currentColor' : 'none'} />
+                <Heart size={14} fill={hasLiked ? 'currentColor' : 'none'} />
                 {formatNumber(likesCount)}
               </button>
             </div>
-
-            <LayoutPicker value={layout} onChange={setLayout} />
-
-            <button
-              onClick={handleShare}
-              className="p-2 text-neutral-400 hover:text-neutral-600 hover:bg-white/50 rounded-lg transition-colors"
-              title="Share"
-            >
-              <Share2 size={20} />
-            </button>
           </div>
         </div>
 
-        <NFTGrid nfts={nfts} layout={layout} />
+        {/* Right side - All hover only */}
+        <div className={`
+          flex items-center gap-2
+          opacity-0 group-hover:opacity-100
+          transition-opacity duration-500
+        `}>
+          {/* Navigation */}
+          <div className={`flex items-center gap-1 px-2 py-1 rounded-lg ${
+            isDark
+              ? 'bg-white/15 ring-1 ring-white/30'
+              : 'bg-black/10 ring-1 ring-black/15'
+          }`}>
+            <Link href="/my-nfts" className={`p-1.5 rounded-full hover:bg-black/10 ${textMuted}`} title="My NFTs">
+              <Image size={18} />
+            </Link>
+            <Link href="/my-galleries" className={`p-1.5 rounded-full hover:bg-black/10 ${textMuted}`} title="My Galleries">
+              <LayoutGrid size={18} />
+            </Link>
+            <Link href="/create" className={`p-1.5 rounded-full hover:bg-black/10 ${textMuted}`} title="Create Gallery">
+              <Plus size={18} />
+            </Link>
+          </div>
+
+          <div className={`w-px h-5 mx-4 ${isDark ? 'bg-white/30' : 'bg-black/20'}`} />
+
+          {/* Layout controls */}
+          <div className="flex items-center gap-2">
+            <SizePicker value={size} onChange={setSize} variant={isDark ? 'dark' : 'transparent'} />
+            <ArrangementPicker value={arrangement} onChange={setArrangement} variant={isDark ? 'dark' : 'transparent'} />
+          </div>
+
+          <div className={`w-px h-5 mx-4 ${isDark ? 'bg-white/30' : 'bg-black/20'}`} />
+
+          {/* Actions */}
+          <div className="flex items-center gap-2">
+            {isOwner && (
+              <button
+                onClick={() => router.push(`/edit/${slug}`)}
+                className={`p-1.5 rounded-full hover:bg-black/10 ${textMuted}`}
+                title="Edit Gallery"
+              >
+                <Pencil size={18} />
+              </button>
+            )}
+            <button
+              onClick={handleShare}
+              className={`h-8 px-3 rounded-full transition-all flex items-center justify-center ${
+                isDark
+                  ? 'bg-white text-black hover:bg-white/90'
+                  : 'bg-neutral-900 text-white hover:bg-neutral-800'
+              }`}
+              title="Copy Link"
+            >
+              {copied ? (
+                <span className="text-xs font-medium">Copied!</span>
+              ) : (
+                <Share2 size={16} />
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Main content - clean art display */}
+      <div className="min-h-screen p-4 pt-16 md:p-8 md:pt-16">
+        <NFTGrid nfts={nfts} size={size} arrangement={arrangement} />
       </div>
     </div>
   );

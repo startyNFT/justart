@@ -17,7 +17,6 @@ import {
   rectSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import Image from 'next/image';
 import { GripVertical, X } from 'lucide-react';
 import type { NFT } from '@/lib/stargaze';
 
@@ -49,13 +48,12 @@ function SortableItem({ nft, onRemove }: SortableItemProps) {
         isDragging ? 'z-50 shadow-xl opacity-90' : ''
       }`}
     >
-      {nft.image ? (
-        <Image
-          src={nft.image}
+      {(nft.thumbnail || nft.image) ? (
+        <img
+          src={nft.thumbnail || nft.image}
           alt={nft.name}
-          fill
-          className="object-cover"
-          sizes="(max-width: 640px) 33vw, 25vw"
+          className="absolute inset-0 w-full h-full object-cover"
+          loading="lazy"
         />
       ) : (
         <div className="w-full h-full flex items-center justify-center text-neutral-300">

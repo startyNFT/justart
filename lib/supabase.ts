@@ -22,6 +22,7 @@ export type Gallery = {
   nft_ids: { contract: string; token_id: string }[];
   payment_tx_hash: string | null;
   views: number;
+  show_info: boolean;
   created_at: string;
 };
 

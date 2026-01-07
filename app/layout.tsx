@@ -3,6 +3,7 @@ import { Inter } from 'next/font/google';
 import './globals.css';
 import { CosmosProvider } from '@/providers/CosmosProvider';
 import { Header } from '@/components/Header';
+import { MainWrapper } from '@/components/MainWrapper';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -21,9 +22,9 @@ export default function RootLayout({
       <body className={inter.className}>
         <CosmosProvider>
           <Header />
-          <main className="pt-14 min-h-screen">
+          <MainWrapper>
             {children}
-          </main>
+          </MainWrapper>
         </CosmosProvider>
       </body>
     </html>

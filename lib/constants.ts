@@ -8,6 +8,24 @@ export const GALLERY_PRICE_INCREMENT = 1000; // STARS
 
 export const STARGAZE_NFT_URL = 'https://www.stargaze.zone/m';
 
+// Size options - how big the images are
+export const SIZE_OPTIONS = [
+  { id: 'small', label: 'Small' },
+  { id: 'medium', label: 'Medium' },
+  { id: 'large', label: 'Large' },
+] as const;
+
+// Arrangement options - how images are laid out
+export const ARRANGEMENT_OPTIONS = [
+  { id: 'grid', label: 'Grid' },
+  { id: 'vertical', label: 'Vertical' },
+  { id: 'justified', label: 'Justified' },
+] as const;
+
+export type SizeType = typeof SIZE_OPTIONS[number]['id'];
+export type ArrangementType = typeof ARRANGEMENT_OPTIONS[number]['id'];
+
+// Legacy support
 export const LAYOUT_OPTIONS = [
   { id: 'small', label: 'Small Grid', cols: 6 },
   { id: 'medium', label: 'Medium Grid', cols: 4 },

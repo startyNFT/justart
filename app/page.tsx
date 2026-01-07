@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Image from 'next/image';
 import Link from 'next/link';
 import { supabase, type Gallery } from '@/lib/supabase';
 import { fetchNFTById, type NFT } from '@/lib/stargaze';
@@ -96,13 +95,10 @@ export default function Home() {
             href={`/g/${gallery.slug}`}
             className="relative aspect-square md:aspect-auto md:h-[50vh] lg:h-screen group overflow-hidden"
           >
-            <Image
+            <img
               src={nft.image}
               alt={nft.name}
-              fill
-              className="object-cover transition-transform duration-700 group-hover:scale-105"
-              sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 33vw"
-              priority={index < 3}
+              className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
             />
 
             {/* Hover overlay with gallery info */}

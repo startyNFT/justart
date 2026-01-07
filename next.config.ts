@@ -5,7 +5,11 @@ const nextConfig: NextConfig = {
     remotePatterns: [
       {
         protocol: 'https',
-        hostname: '**.stargaze-apis.com',
+        hostname: 'ipfs-gw.stargaze-apis.com',
+      },
+      {
+        protocol: 'https',
+        hostname: '*.stargaze-apis.com',
       },
       {
         protocol: 'https',

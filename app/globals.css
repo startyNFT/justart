@@ -40,3 +40,73 @@ body {
   outline: 2px solid #e5e5e5;
   outline-offset: 2px;
 }
+
+/* Cosmos-kit modal fixes */
+[class*="chakra-modal"] button svg,
+[class*="chakra"] button svg {
+  width: 16px !important;
+  height: 16px !important;
+}
+
+[class*="chakra-modal"] button,
+[class*="chakra"] button {
+  font-size: 14px !important;
+}
+
+[class*="chakra-modal__close-btn"],
+[class*="chakra-icon"],
+button[aria-label="Close"],
+button[aria-label="close modal"] {
+  width: 32px !important;
+  height: 32px !important;
+  min-width: 32px !important;
+  min-height: 32px !important;
+}
+
+[class*="chakra-modal__close-btn"] svg,
+[class*="chakra-icon"] svg,
+button[aria-label="Close"] svg,
+button[aria-label="close modal"] svg,
+button[aria-label="refresh"] svg {
+  width: 14px !important;
+  height: 14px !important;
+}
+
+/* Fix large icon buttons in wallet modal */
+[class*="chakra"] [class*="icon"],
+[class*="chakra"] [class*="Icon"] {
+  width: 20px !important;
+  height: 20px !important;
+}
+
+/* Fix refresh button specifically */
+button[aria-label*="refresh"],
+button[aria-label*="Refresh"] {
+  width: 32px !important;
+  height: 32px !important;
+  padding: 6px !important;
+}
+
+button[aria-label*="refresh"] svg,
+button[aria-label*="Refresh"] svg {
+  width: 16px !important;
+  height: 16px !important;
+}
+
+/* Smooth scroll performance optimizations */
+html {
+  scroll-behavior: auto; /* Disable smooth scroll for better performance */
+}
+
+/* GPU acceleration for image containers */
+.nft-grid img {
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+/* Optimize paint performance */
+@media (prefers-reduced-motion: no-preference) {
+  * {
+    scroll-behavior: auto;
+  }
+}

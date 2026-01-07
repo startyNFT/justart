@@ -29,3 +29,20 @@ export function calculateGalleryPrice(galleryCount: number): number {
 export function getStargazeNFTUrl(contractAddress: string, tokenId: string): string {
   return `https://www.stargaze.zone/m/${contractAddress}/${tokenId}`;
 }
+
+// Check if a hex color is dark (for determining text color)
+export function isDarkColor(hexColor: string): boolean {
+  // Remove # if present
+  const hex = hexColor.replace('#', '');
+
+  // Parse RGB values
+  const r = parseInt(hex.substring(0, 2), 16);
+  const g = parseInt(hex.substring(2, 4), 16);
+  const b = parseInt(hex.substring(4, 6), 16);
+
+  // Calculate luminance (perceived brightness)
+  // Using the formula: 0.299*R + 0.587*G + 0.114*B
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+
+  return luminance < 0.5;
+}

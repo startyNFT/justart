@@ -6,7 +6,7 @@ import { useChain } from '@cosmos-kit/react';
 import { NFTGrid } from '@/components/NFTGrid';
 import { ConnectWalletButton } from '@/components/ConnectWalletButton';
 import { SizePicker, ArrangementPicker } from '@/components/LayoutPicker';
-import { fetchNFTPage, PAGE_SIZE, type NFT } from '@/lib/stargaze';
+import { fetchNFTPage, PAGE_SIZE, FAST_INITIAL_SIZE, type NFT } from '@/lib/stargaze';
 import type { SizeType, ArrangementType } from '@/lib/constants';
 import { Wallet, Loader2, ChevronLeft, ChevronRight, Layers } from 'lucide-react';
 
@@ -133,7 +133,7 @@ export default function MyNFTs() {
     setLoadingProgress({ loaded: 0, total: 0 });
   }, []);
 
-  // Load page
+  // Load page with progressive loading
   useEffect(() => {
     if (!address) return;
 
@@ -155,14 +155,41 @@ export default function MyNFTs() {
         } catch { /* ignore cache errors */ }
       }
 
-      // No cache hit - show loading progress bar
+      // Progressive loading for first page - show something fast
+      if (currentPage === 1) {
+        setInitialProgress(0);
+        setLoading(true);
+
+        // First: Quick fetch of 12 NFTs to show immediately
+        const fastResult = await fetchNFTPage(address!, 0, FAST_INITIAL_SIZE);
+
+        if (fastResult.nfts.length > 0) {
+          setNfts(fastResult.nfts);
+          setTotal(fastResult.total);
+          setLoading(false); // Hide skeleton immediately
+        }
+
+        // Then: Fetch the rest of the page in background
+        if (fastResult.total > FAST_INITIAL_SIZE) {
+          const remainingResult = await fetchNFTPage(address!, FAST_INITIAL_SIZE, ITEMS_PER_PAGE - FAST_INITIAL_SIZE);
+          setNfts(prev => [...prev.slice(0, FAST_INITIAL_SIZE), ...remainingResult.nfts]);
+        }
+
+        // Start background loading for other pages
+        if (fastResult.total > PAGE_SIZE && !backgroundLoadingRef.current) {
+          backgroundLoadAllPages(address!, fastResult.total);
+        }
+        return;
+      }
+
+      // Non-first pages - normal loading
       setInitialProgress(0);
       setLoading(true);
 
       const result = await fetchNFTPage(address!, offset, ITEMS_PER_PAGE);
 
-      // Retry if no results on first page
-      if (result.nfts.length === 0 && currentPage === 1 && retryCount < 3) {
+      // Retry if no results
+      if (result.nfts.length === 0 && retryCount < 3) {
         console.warn(`Got 0 NFTs, retrying (attempt ${retryCount + 1})...`);
         await new Promise(resolve => setTimeout(resolve, 1500));
         return loadPage(retryCount + 1);
@@ -177,11 +204,6 @@ export default function MyNFTs() {
       setInitialProgress(100);
       await new Promise(resolve => setTimeout(resolve, 200));
       setLoading(false);
-
-      // Start background loading silently
-      if (currentPage === 1 && result.total > PAGE_SIZE && !backgroundLoadingRef.current) {
-        backgroundLoadAllPages(address!, result.total);
-      }
     }
 
     loadPage();

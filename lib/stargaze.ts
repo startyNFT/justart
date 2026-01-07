@@ -212,6 +212,7 @@ function setCachedPage(walletAddress: string, offset: number, data: NFT[]) {
 }
 
 export const PAGE_SIZE = 75; // NFTs per page
+export const FAST_INITIAL_SIZE = 12; // Quick first load for instant UI
 
 const nftQuery = `
   query TokensOwned($owner: String!, $limit: Int, $offset: Int) {

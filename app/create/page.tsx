@@ -10,7 +10,7 @@ import { ColorPicker } from '@/components/ColorPicker';
 import { MusicPicker } from '@/components/MusicPicker';
 import { ConnectWalletButton } from '@/components/ConnectWalletButton';
 import { CustomRowEditor } from '@/components/CustomRowEditor';
-import { fetchNFTPage, PAGE_SIZE, type NFT } from '@/lib/stargaze';
+import { fetchNFTPage, PAGE_SIZE, FAST_INITIAL_SIZE, type NFT } from '@/lib/stargaze';
 import { supabase } from '@/lib/supabase';
 import { generateSlug } from '@/lib/utils';
 import { TREASURY_WALLET } from '@/lib/constants';
@@ -130,27 +130,38 @@ export default function CreateGallery() {
     };
   }, [loading]);
 
-  // Load NFT collection in background (starts on mount)
+  // Load NFT collection with progressive loading
   const loadNftCollection = useCallback(async (walletAddress: string) => {
     if (nftCollectionLoaded.current) return;
     nftCollectionLoaded.current = true;
     setLoadingCollection(true);
 
-    const result = await fetchNFTPage(walletAddress, 0);
-    setPageNfts(result.nfts);
-    if (result.total > 0) {
-      setTotal(result.total);
+    // First: Quick fetch of 12 NFTs to show immediately
+    const fastResult = await fetchNFTPage(walletAddress, 0, FAST_INITIAL_SIZE);
+    if (fastResult.nfts.length > 0) {
+      setPageNfts(fastResult.nfts);
+      setTotal(fastResult.total);
+      setLoadingCollection(false); // Hide skeleton immediately
     }
-    setLoadingCollection(false);
 
-    // Start background loading for remaining pages
-    if (result.total > PAGE_SIZE && !backgroundLoadingRef.current) {
-      backgroundLoadingRef.current = true;
-      backgroundLoadAllNfts(walletAddress, result.total, result.nfts);
+    // Then: Fetch the rest of the first page
+    if (fastResult.total > FAST_INITIAL_SIZE) {
+      const remainingResult = await fetchNFTPage(walletAddress, FAST_INITIAL_SIZE, PAGE_SIZE - FAST_INITIAL_SIZE);
+      const fullFirstPage = [...fastResult.nfts, ...remainingResult.nfts];
+      setPageNfts(fullFirstPage);
+
+      // Start background loading for remaining pages
+      if (fastResult.total > PAGE_SIZE && !backgroundLoadingRef.current) {
+        backgroundLoadingRef.current = true;
+        backgroundLoadAllNfts(walletAddress, fastResult.total, fullFirstPage);
+      } else {
+        setAllLoadedNfts(fullFirstPage);
+        const audioFromPage = fullFirstPage.filter(nft => nft.mediaType === 'audio' || nft.mediaType === 'video');
+        setAudioNfts(audioFromPage);
+      }
     } else {
-      setAllLoadedNfts(result.nfts);
-      // Extract audio NFTs when only one page
-      const audioFromPage = result.nfts.filter(nft => nft.mediaType === 'audio' || nft.mediaType === 'video');
+      setAllLoadedNfts(fastResult.nfts);
+      const audioFromPage = fastResult.nfts.filter(nft => nft.mediaType === 'audio' || nft.mediaType === 'video');
       setAudioNfts(audioFromPage);
     }
   }, []);

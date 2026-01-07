@@ -17,6 +17,7 @@ type NFTGridProps = {
   onSelect?: (nft: NFT) => void;
   useThumbnails?: boolean; // Force thumbnails even for large sizes (e.g., selection mode)
   highRes?: boolean; // Use full resolution images (for gallery display)
+  customRowCounts?: number[] | null; // Custom row counts for justified layout
 };
 
 const gridSizeClasses: Record<SizeType, string> = {
@@ -311,6 +312,7 @@ export function NFTGrid({
   selectedIds,
   onSelect,
   highRes,
+  customRowCounts,
 }: NFTGridProps) {
   // Legacy support
   if (layout && !arrangement) {
@@ -406,6 +408,53 @@ export function NFTGrid({
       );
     }
 
+    // Use custom row counts if provided, otherwise calculate automatically
+    if (customRowCounts && customRowCounts.length > 0) {
+      // Custom row layout
+      let nftIndex = 0;
+      const customRows: { nft: NFT; index: number }[][] = [];
+
+      for (const count of customRowCounts) {
+        const row: { nft: NFT; index: number }[] = [];
+        for (let i = 0; i < count && nftIndex < nfts.length; i++) {
+          row.push({ nft: nfts[nftIndex], index: nftIndex });
+          nftIndex++;
+        }
+        if (row.length > 0) {
+          customRows.push(row);
+        }
+      }
+
+      return (
+        <div ref={containerRef} className="nft-grid w-full flex flex-col gap-1">
+          {customRows.map((row, rowIdx) => {
+            const gap = 4;
+            const totalGap = gap * (row.length - 1);
+            const itemWidth = (containerWidth - totalGap) / row.length;
+            const rowHeight = justifiedRowHeights[size];
+
+            return (
+              <div key={rowIdx} className="flex gap-1 w-full">
+                {row.map(({ nft, index }) => (
+                  <JustifiedItem
+                    key={getKey(nft, index)}
+                    nft={nft}
+                    width={itemWidth}
+                    height={rowHeight}
+                    selectable={selectable}
+                    selected={isSelected(nft)}
+                    onSelect={() => onSelect?.(nft)}
+                    highRes={highRes}
+                  />
+                ))}
+              </div>
+            );
+          })}
+        </div>
+      );
+    }
+
+    // Automatic justified layout
     const rows = calculateRows(nfts, containerWidth, justifiedRowHeights[size], 4);
 
     return (

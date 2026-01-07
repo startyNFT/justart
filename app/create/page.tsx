@@ -9,6 +9,7 @@ import { SizePicker, ArrangementPicker } from '@/components/LayoutPicker';
 import { ColorPicker } from '@/components/ColorPicker';
 import { MusicPicker } from '@/components/MusicPicker';
 import { ConnectWalletButton } from '@/components/ConnectWalletButton';
+import { CustomRowEditor } from '@/components/CustomRowEditor';
 import { fetchNFTPage, PAGE_SIZE, type NFT } from '@/lib/stargaze';
 import { supabase } from '@/lib/supabase';
 import { generateSlug } from '@/lib/utils';
@@ -45,6 +46,7 @@ export default function CreateGallery() {
   const [musicTrack, setMusicTrack] = useState<MusicTrack | null>(null);
   const [nftDescriptions, setNftDescriptions] = useState<Record<string, string>>({});
   const [audioNfts, setAudioNfts] = useState<NFT[]>([]);
+  const [customRowCounts, setCustomRowCounts] = useState<number[] | null>(null);
 
   const [galleryCount, setGalleryCount] = useState(0);
   const [paidSlots, setPaidSlots] = useState(1);
@@ -432,6 +434,7 @@ export default function CreateGallery() {
         show_info: showInfo,
         lock_layout: lockLayout,
         ...(musicTrack ? { music_track: JSON.stringify(musicTrack) } : {}),
+        ...(customRowCounts ? { custom_row_counts: customRowCounts } : {}),
       };
 
       const result = await supabase.from('galleries').insert(insertData);
@@ -921,7 +924,21 @@ export default function CreateGallery() {
         <>
           <p className="text-neutral-500 text-sm mb-6">
             Drag to reorder. {arrangement === 'presentation' && 'Add descriptions for presentation mode.'}
+            {arrangement === 'justified' && ' Customize row layout below.'}
           </p>
+
+          {/* Custom row editor for justified layout */}
+          {arrangement === 'justified' && selectedNfts.length > 0 && (
+            <div className="mb-8 p-4 bg-neutral-50 rounded-xl">
+              <CustomRowEditor
+                nfts={selectedNfts}
+                rowCounts={customRowCounts}
+                onChange={setCustomRowCounts}
+                size={size}
+              />
+            </div>
+          )}
+
           <SortableNFTGrid
             nfts={selectedNfts}
             onReorder={setSelectedNfts}
@@ -978,6 +995,7 @@ export default function CreateGallery() {
               nfts={selectedNfts.slice(0, size === 'small' ? 12 : size === 'medium' ? 8 : 4)}
               size={size}
               arrangement={arrangement}
+              customRowCounts={arrangement === 'justified' ? customRowCounts : undefined}
             />
             {selectedNfts.length > (size === 'small' ? 12 : size === 'medium' ? 8 : 4) && (
               <p className="text-center text-neutral-400 text-sm mt-4">

@@ -34,6 +34,7 @@ export default function GalleryView() {
   const [copied, setCopied] = useState(false);
   const [lockLayout, setLockLayout] = useState(false);
   const [isShowingVideo, setIsShowingVideo] = useState(false);
+  const [customRowCounts, setCustomRowCounts] = useState<number[] | null>(null);
 
   const isDark = gallery ? isDarkColor(gallery.background_color) : false;
   const textColor = isDark ? 'text-white' : 'text-neutral-900';
@@ -117,6 +118,11 @@ export default function GalleryView() {
 
       // Set lock_layout (default to false if not set)
       setLockLayout(galleryData.lock_layout ?? false);
+
+      // Set custom row counts if available
+      if (galleryData.custom_row_counts) {
+        setCustomRowCounts(galleryData.custom_row_counts);
+      }
 
       const nftPromises = galleryData.nft_ids.map(
         (item: NFTItem) =>
@@ -321,7 +327,13 @@ export default function GalleryView() {
         />
       ) : (
         <div className="min-h-screen p-4 pt-16 md:p-8 md:pt-16">
-          <NFTGrid nfts={nfts} size={size} arrangement={arrangement} highRes />
+          <NFTGrid
+            nfts={nfts}
+            size={size}
+            arrangement={arrangement}
+            highRes
+            customRowCounts={arrangement === 'justified' ? customRowCounts : undefined}
+          />
         </div>
       )}
 

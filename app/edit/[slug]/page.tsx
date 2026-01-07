@@ -8,6 +8,7 @@ import { SortableNFTGrid } from '@/components/SortableNFTGrid';
 import { SizePicker, ArrangementPicker } from '@/components/LayoutPicker';
 import { ColorPicker } from '@/components/ColorPicker';
 import { MusicPicker } from '@/components/MusicPicker';
+import { CustomRowEditor } from '@/components/CustomRowEditor';
 import { fetchNFTPage, fetchNFTById, PAGE_SIZE, type NFT } from '@/lib/stargaze';
 import { supabase, type Gallery } from '@/lib/supabase';
 import type { SizeType, ArrangementType, MusicTrack } from '@/lib/constants';
@@ -45,6 +46,7 @@ export default function EditGallery() {
   const [musicTrack, setMusicTrack] = useState<MusicTrack | null>(null);
   const [nftDescriptions, setNftDescriptions] = useState<Record<string, string>>({});
   const [audioNfts, setAudioNfts] = useState<NFT[]>([]);
+  const [customRowCounts, setCustomRowCounts] = useState<number[] | null>(null);
 
   // Search and filter state
   const [searchQuery, setSearchQuery] = useState('');
@@ -226,6 +228,11 @@ export default function EditGallery() {
         const [s, a] = storedLayout.split('-');
         setSize(s as SizeType);
         setArrangement(a as ArrangementType);
+      }
+
+      // Load custom row counts if available
+      if (galleryData.custom_row_counts) {
+        setCustomRowCounts(galleryData.custom_row_counts);
       }
 
       // Fetch selected NFTs from gallery
@@ -417,6 +424,7 @@ export default function EditGallery() {
         nft_ids: nftIds,
         show_info: showInfo,
         music_track: musicTrack ? JSON.stringify(musicTrack) : null,
+        custom_row_counts: customRowCounts,
       };
 
       // Try with lock_layout
@@ -949,7 +957,21 @@ export default function EditGallery() {
         <>
           <p className="text-neutral-500 text-sm mb-6">
             Drag to reorder. {arrangement === 'presentation' && 'Add descriptions for presentation mode.'}
+            {arrangement === 'justified' && ' Customize row layout below.'}
           </p>
+
+          {/* Custom row editor for justified layout */}
+          {arrangement === 'justified' && selectedNfts.length > 0 && (
+            <div className="mb-8 p-4 bg-neutral-50 rounded-xl">
+              <CustomRowEditor
+                nfts={selectedNfts}
+                rowCounts={customRowCounts}
+                onChange={setCustomRowCounts}
+                size={size}
+              />
+            </div>
+          )}
+
           <SortableNFTGrid
             nfts={selectedNfts}
             onReorder={setSelectedNfts}

@@ -35,6 +35,7 @@ export type Gallery = {
   show_info: boolean;
   lock_layout: boolean; // If true, viewers cannot change size/arrangement
   music_track: string | null; // ID of curated music track to play
+  custom_row_counts: number[] | null; // Custom row layout for justified arrangement
   created_at: string;
 };
 

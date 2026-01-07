@@ -207,7 +207,7 @@ export function PresentationView({
         </button>
 
         {/* NFT Display */}
-        <div className="w-full h-full flex items-center justify-center p-8 pb-32">
+        <div className="w-full h-full flex items-center justify-center px-8 pt-16 pb-40">
           {isVideo ? (
             <video
               key={currentNft.animationUrl}

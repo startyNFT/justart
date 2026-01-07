@@ -42,27 +42,31 @@ async function fetchNFTImage(contract: string, tokenId: string): Promise<{ image
 }
 
 export async function POST() {
-  // Fetch all galleries without cached_thumbnails
+  // Fetch ALL galleries to force update
   const { data: galleries, error } = await supabase
     .from('galleries')
-    .select('id, nft_ids, cached_thumbnails')
-    .or('cached_thumbnails.is.null,cached_thumbnails.eq.{}');
+    .select('id, nft_ids, cached_thumbnails');
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
   if (!galleries || galleries.length === 0) {
-    return NextResponse.json({ message: 'No galleries to update', updated: 0 });
+    return NextResponse.json({ message: 'No galleries found', updated: 0 });
   }
 
   let updated = 0;
+  let skipped = 0;
   const errors: string[] = [];
+  const details: { id: string; thumbnails: number }[] = [];
 
   for (const gallery of galleries) {
     try {
       const nftIds = gallery.nft_ids as { contract: string; token_id: string }[];
-      if (!nftIds || nftIds.length === 0) continue;
+      if (!nftIds || nftIds.length === 0) {
+        skipped++;
+        continue;
+      }
 
       // Fetch first 8 NFTs to find 4 images (skip audio)
       const cachedThumbnails: string[] = [];
@@ -90,7 +94,10 @@ export async function POST() {
           errors.push(`Gallery ${gallery.id}: ${updateError.message}`);
         } else {
           updated++;
+          details.push({ id: gallery.id, thumbnails: cachedThumbnails.length });
         }
+      } else {
+        errors.push(`Gallery ${gallery.id}: No images found`);
       }
     } catch (e) {
       errors.push(`Gallery ${gallery.id}: ${e}`);
@@ -101,6 +108,8 @@ export async function POST() {
     message: `Backfill complete`,
     total: galleries.length,
     updated,
+    skipped,
+    details,
     errors: errors.length > 0 ? errors : undefined,
   });
 }

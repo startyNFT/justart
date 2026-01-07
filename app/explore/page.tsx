@@ -220,7 +220,7 @@ export default function ExplorePage() {
         ) : searchResults.length > 0 ? (
           <>
             <p className="text-sm text-neutral-500 mb-4">{searchResults.length} galleries found</p>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
               {searchResults.map((gallery) => (
                 <GalleryCard key={gallery.id} gallery={gallery} />
               ))}
@@ -289,7 +289,7 @@ export default function ExplorePage() {
               <ChevronRight size={16} />
             </Link>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
             {mostLiked.map((gallery) => (
               <GalleryCard key={gallery.id} gallery={gallery} />
             ))}
@@ -300,7 +300,7 @@ export default function ExplorePage() {
       {/* Most Viewed This Week */}
       {!selectedCategory && mostViewedWeek.length > 0 && (
         <section className="mb-12">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between mb-5">
             <h2 className="text-lg font-medium">Most Viewed This Week</h2>
             <Link
               href="/explore/trending"
@@ -310,7 +310,7 @@ export default function ExplorePage() {
               <ChevronRight size={16} />
             </Link>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
             {mostViewedWeek.map((gallery) => (
               <GalleryCard key={gallery.id} gallery={gallery} />
             ))}
@@ -321,7 +321,7 @@ export default function ExplorePage() {
       {/* Random Galleries */}
       {!selectedCategory && randomGalleries.length > 0 && (
         <section className="mb-12">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between mb-5">
             <div className="flex items-center gap-3">
               <h2 className="text-lg font-medium">Random Galleries</h2>
               <button
@@ -340,7 +340,7 @@ export default function ExplorePage() {
               <ChevronRight size={16} />
             </Link>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
             {randomGalleries.map((gallery) => (
               <GalleryCard key={gallery.id} gallery={gallery} />
             ))}
@@ -351,11 +351,11 @@ export default function ExplorePage() {
       {/* Category sections or filtered view */}
       {selectedCategory ? (
         <section>
-          <h2 className="text-lg font-medium mb-4">
+          <h2 className="text-lg font-medium mb-5">
             {GALLERY_CATEGORIES.find(c => c.value === selectedCategory)?.label} Galleries
           </h2>
           {categoryGalleries[selectedCategory]?.length > 0 ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
               {categoryGalleries[selectedCategory].map((gallery) => (
                 <GalleryCard key={gallery.id} gallery={gallery} />
               ))}
@@ -374,7 +374,7 @@ export default function ExplorePage() {
 
           return (
             <section key={cat.value} className="mb-12">
-              <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center justify-between mb-5">
                 <h2 className="text-lg font-medium">{cat.label}</h2>
                 <button
                   onClick={() => setSelectedCategory(cat.value)}
@@ -384,7 +384,7 @@ export default function ExplorePage() {
                   <ChevronRight size={16} />
                 </button>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
                 {galleries.map((gallery) => (
                   <GalleryCard key={gallery.id} gallery={gallery} />
                 ))}

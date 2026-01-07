@@ -54,14 +54,36 @@ const SimpleCard = memo(function SimpleCard({
   highRes?: boolean;
 }) {
   const [videoPlaying, setVideoPlaying] = useState(false);
+  const [imgError, setImgError] = useState(false);
+  const [useFallback, setUseFallback] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
 
   const isVideo = nft.mediaType === 'video' && nft.animationUrl;
-  // For videos, always use thumbnail first
-  const originalUrl = isVideo
-    ? (nft.thumbnail || nft.image)
-    : (highRes ? nft.image : (nft.thumbnail || nft.image));
+
+  // Get the best available image URL - try multiple sources
+  const getImageUrl = () => {
+    if (isVideo) {
+      return nft.thumbnail || nft.image || '';
+    }
+    if (highRes) {
+      return nft.image || nft.thumbnail || '';
+    }
+    return nft.thumbnail || nft.image || '';
+  };
+
+  const originalUrl = getImageUrl();
   const { url: cdnImageUrl } = useCdnUrl(originalUrl, highRes ? 'lg' : 'md');
+
+  // Handle image load error - try original URL, then show placeholder
+  const handleImgError = useCallback(() => {
+    if (!useFallback && originalUrl && originalUrl !== cdnImageUrl) {
+      setUseFallback(true);
+    } else {
+      setImgError(true);
+    }
+  }, [useFallback, originalUrl, cdnImageUrl]);
+
+  const displayUrl = useFallback ? originalUrl : (cdnImageUrl || originalUrl);
 
   const handleClick = useCallback(() => {
     if (selectable && onSelect) {
@@ -105,14 +127,15 @@ const SimpleCard = memo(function SimpleCard({
               playsInline
               autoPlay
             />
-          ) : cdnImageUrl ? (
+          ) : displayUrl && !imgError ? (
             <img
-              src={cdnImageUrl}
+              src={displayUrl}
               alt=""
               className="w-full h-auto"
               draggable={false}
               decoding="async"
               loading="lazy"
+              onError={handleImgError}
             />
           ) : (
             <div className="w-full aspect-square flex items-center justify-center text-neutral-300 text-xs">
@@ -130,14 +153,15 @@ const SimpleCard = memo(function SimpleCard({
             )}
           </button>
         </>
-      ) : cdnImageUrl ? (
+      ) : displayUrl && !imgError ? (
         <img
-          src={cdnImageUrl}
+          src={displayUrl}
           alt=""
           className="w-full h-auto"
           draggable={false}
           decoding="async"
           loading="lazy"
+          onError={handleImgError}
         />
       ) : (
         <div className="w-full aspect-square flex items-center justify-center text-neutral-300 text-xs">
@@ -174,14 +198,36 @@ const JustifiedItem = memo(function JustifiedItem({
   highRes?: boolean;
 }) {
   const [videoPlaying, setVideoPlaying] = useState(false);
+  const [imgError, setImgError] = useState(false);
+  const [useFallback, setUseFallback] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
 
   const isVideo = nft.mediaType === 'video' && nft.animationUrl;
-  // For videos, always use thumbnail first
-  const originalUrl = isVideo
-    ? (nft.thumbnail || nft.image)
-    : (highRes ? nft.image : (nft.thumbnail || nft.image));
+
+  // Get the best available image URL - try multiple sources
+  const getImageUrl = () => {
+    if (isVideo) {
+      return nft.thumbnail || nft.image || '';
+    }
+    if (highRes) {
+      return nft.image || nft.thumbnail || '';
+    }
+    return nft.thumbnail || nft.image || '';
+  };
+
+  const originalUrl = getImageUrl();
   const { url: cdnImageUrl } = useCdnUrl(originalUrl, highRes ? 'lg' : 'md');
+
+  // Handle image load error - try original URL, then show placeholder
+  const handleImgError = useCallback(() => {
+    if (!useFallback && originalUrl && originalUrl !== cdnImageUrl) {
+      setUseFallback(true);
+    } else {
+      setImgError(true);
+    }
+  }, [useFallback, originalUrl, cdnImageUrl]);
+
+  const displayUrl = useFallback ? originalUrl : (cdnImageUrl || originalUrl);
 
   const handleClick = useCallback(() => {
     if (selectable && onSelect) {
@@ -227,14 +273,15 @@ const JustifiedItem = memo(function JustifiedItem({
               playsInline
               autoPlay
             />
-          ) : cdnImageUrl ? (
+          ) : displayUrl && !imgError ? (
             <img
-              src={cdnImageUrl}
+              src={displayUrl}
               alt=""
               className="w-full h-full object-cover"
               draggable={false}
               decoding="async"
               loading="lazy"
+              onError={handleImgError}
             />
           ) : (
             <div className="w-full h-full flex items-center justify-center text-neutral-300 text-xs">
@@ -252,14 +299,15 @@ const JustifiedItem = memo(function JustifiedItem({
             )}
           </button>
         </>
-      ) : cdnImageUrl ? (
+      ) : displayUrl && !imgError ? (
         <img
-          src={cdnImageUrl}
+          src={displayUrl}
           alt=""
           className="w-full h-full object-cover"
           draggable={false}
           decoding="async"
           loading="lazy"
+          onError={handleImgError}
         />
       ) : (
         <div className="w-full h-full flex items-center justify-center text-neutral-300 text-xs">

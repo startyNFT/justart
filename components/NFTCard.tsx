@@ -17,14 +17,40 @@ type NFTCardProps = {
 export const NFTCard = memo(function NFTCard({ nft, selected, onSelect, selectable, highRes }: NFTCardProps) {
   // For videos, always use thumbnail first (video loads on play)
   const isVideo = nft.mediaType === 'video' && nft.animationUrl;
-  const originalUrl = isVideo
-    ? (nft.thumbnail || nft.image)  // Videos always show thumbnail
-    : (highRes ? nft.image : (nft.thumbnail || nft.image));
+
+  // Get the best available image URL - try multiple sources
+  const getImageUrl = () => {
+    if (isVideo) {
+      // For videos: prefer thumbnail, then image
+      return nft.thumbnail || nft.image || '';
+    }
+    // For images/gifs: prefer image (full res) or thumbnail
+    if (highRes) {
+      return nft.image || nft.thumbnail || '';
+    }
+    return nft.thumbnail || nft.image || '';
+  };
+
+  const originalUrl = getImageUrl();
   const { url: cdnImageUrl } = useCdnUrl(originalUrl, highRes ? 'lg' : 'sm');
   const [isPlaying, setIsPlaying] = useState(false);
   const [videoPlaying, setVideoPlaying] = useState(false);
+  const [imgError, setImgError] = useState(false);
+  const [useFallback, setUseFallback] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+
+  // Handle image load error - try original URL, then show placeholder
+  const handleImgError = useCallback(() => {
+    if (!useFallback && originalUrl && originalUrl !== cdnImageUrl) {
+      setUseFallback(true);
+    } else {
+      setImgError(true);
+    }
+  }, [useFallback, originalUrl, cdnImageUrl]);
+
+  // Determine which URL to use - always have a fallback
+  const displayUrl = useFallback ? originalUrl : (cdnImageUrl || originalUrl);
 
   const handleClick = useCallback(() => {
     if (selectable && onSelect) {
@@ -84,14 +110,15 @@ export const NFTCard = memo(function NFTCard({ nft, selected, onSelect, selectab
               playsInline
               autoPlay
             />
-          ) : cdnImageUrl ? (
+          ) : displayUrl && !imgError ? (
             <img
-              src={cdnImageUrl}
+              src={displayUrl}
               alt=""
               className="absolute inset-0 w-full h-full object-cover"
               draggable={false}
               decoding="async"
               loading="lazy"
+              onError={handleImgError}
             />
           ) : (
             <div className="w-full h-full flex items-center justify-center text-neutral-300 text-xs">
@@ -110,14 +137,15 @@ export const NFTCard = memo(function NFTCard({ nft, selected, onSelect, selectab
             )}
           </button>
         </>
-      ) : cdnImageUrl ? (
+      ) : displayUrl && !imgError ? (
         <img
-          src={cdnImageUrl}
+          src={displayUrl}
           alt=""
           className="absolute inset-0 w-full h-full object-cover"
           draggable={false}
           decoding="async"
           loading="lazy"
+          onError={handleImgError}
         />
       ) : (
         <div className="w-full h-full flex items-center justify-center text-neutral-300 text-xs">

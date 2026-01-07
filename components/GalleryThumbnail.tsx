@@ -12,6 +12,7 @@ type GalleryThumbnailProps = {
   nftIds: NFTId[];
   backgroundColor?: string;
   cachedThumbnails?: string[] | null; // Pre-cached thumbnail URLs
+  horizontal?: boolean; // Show single image for horizontal cards
 };
 
 // Cache for CDN URLs
@@ -51,7 +52,7 @@ async function getCdnUrl(url: string): Promise<string> {
   return url;
 }
 
-export function GalleryThumbnail({ nftIds, backgroundColor = '#f5f5f5', cachedThumbnails }: GalleryThumbnailProps) {
+export function GalleryThumbnail({ nftIds, backgroundColor = '#f5f5f5', cachedThumbnails, horizontal = false }: GalleryThumbnailProps) {
   const [images, setImages] = useState<string[]>([]);
   const [isVideoOnly, setIsVideoOnly] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -150,42 +151,42 @@ export function GalleryThumbnail({ nftIds, backgroundColor = '#f5f5f5', cachedTh
   // Loading placeholder
   if (loading) {
     return (
-      <div
-        className="w-full h-full flex items-center justify-center"
-        style={{ backgroundColor }}
-      >
-        <div className="grid grid-cols-2 gap-1 w-full h-full p-1">
-          {[...Array(4)].map((_, i) => (
-            <div
-              key={i}
-              className="bg-neutral-200 animate-pulse"
-            />
-          ))}
-        </div>
-      </div>
+      <div className="w-full h-full bg-neutral-200 animate-pulse" />
     );
   }
 
   // No images
   if (images.length === 0) {
     return (
-      <div
-        className="w-full h-full flex items-center justify-center"
-        style={{ backgroundColor }}
-      >
-        <div className="grid grid-cols-2 gap-1 p-4 opacity-50">
-          {[...Array(4)].map((_, i) => (
-            <div
-              key={i}
-              className="w-8 h-8 bg-neutral-300 rounded"
-            />
-          ))}
-        </div>
+      <div className="w-full h-full bg-neutral-100 flex items-center justify-center">
+        <div className="text-neutral-300 text-xs">No preview</div>
       </div>
     );
   }
 
-  // Video-only gallery - show single thumbnail
+  // Horizontal mode - single large image
+  if (horizontal) {
+    return (
+      <div className="w-full h-full relative">
+        <img
+          src={images[0]}
+          alt=""
+          className="absolute inset-0 w-full h-full object-cover"
+          loading="lazy"
+        />
+        {/* Video indicator */}
+        {isVideoOnly && (
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <div className="w-10 h-10 bg-black/40 rounded-full flex items-center justify-center">
+              <div className="w-0 h-0 border-t-[6px] border-t-transparent border-l-[10px] border-l-white border-b-[6px] border-b-transparent ml-0.5" />
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Video-only gallery - show single thumbnail (square mode)
   if (isVideoOnly) {
     return (
       <div className="w-full h-full relative" style={{ backgroundColor }}>
@@ -205,7 +206,7 @@ export function GalleryThumbnail({ nftIds, backgroundColor = '#f5f5f5', cachedTh
     );
   }
 
-  // Regular 2x2 grid for images
+  // Regular 2x2 grid for images (square mode)
   return (
     <div className="w-full h-full grid grid-cols-2 gap-0.5" style={{ backgroundColor }}>
       {[0, 1, 2, 3].map((i) => (

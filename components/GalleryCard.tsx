@@ -29,36 +29,55 @@ export function GalleryCard({ gallery, mode = 'view' }: GalleryCardProps) {
   return (
     <div className="group relative">
       <Link href={linkHref} className="block">
-        <div
-          className="aspect-square rounded-lg overflow-hidden relative"
-          style={{ backgroundColor: gallery.background_color }}
-        >
+        {/* Horizontal card with golden ratio (approx 16:10) */}
+        <div className="aspect-[16/10] rounded-xl overflow-hidden relative bg-neutral-100">
           <GalleryThumbnail
             nftIds={nftIds}
-            backgroundColor={gallery.background_color}
             cachedThumbnails={gallery.cached_thumbnails}
+            horizontal
           />
+
+          {/* Hover overlay with gradient */}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
 
           {/* Mode indicator */}
           {mode === 'edit' && (
-            <div className="absolute top-2 left-2 px-2 py-1 bg-black/70 rounded text-white text-xs flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-              <Pencil size={12} />
+            <div className="absolute top-3 left-3 px-2.5 py-1 bg-black/70 backdrop-blur-sm rounded-full text-white text-xs flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+              <Pencil size={11} />
               Edit
             </div>
           )}
+
+          {/* Stats on hover */}
+          <div className="absolute bottom-3 left-3 right-3 flex items-end justify-between opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+            <h3 className="font-medium text-white text-sm truncate max-w-[70%]">
+              {gallery.name}
+            </h3>
+            <div className="flex items-center gap-2.5 text-white/90 text-xs">
+              <span className="flex items-center gap-1">
+                <Eye size={12} />
+                {formatNumber(gallery.views)}
+              </span>
+              <span className="flex items-center gap-1">
+                <Heart size={12} />
+                {formatNumber(gallery.likes_count || 0)}
+              </span>
+            </div>
+          </div>
         </div>
 
-        <div className="mt-2 flex items-center justify-between">
-          <h3 className="font-medium text-neutral-900 truncate">
+        {/* Title below card */}
+        <div className="mt-2 px-0.5">
+          <h3 className="font-medium text-neutral-900 text-sm truncate">
             {gallery.name}
           </h3>
-          <div className="flex items-center gap-3 text-neutral-400 text-sm">
+          <div className="flex items-center gap-2 text-neutral-400 text-xs mt-0.5">
             <span className="flex items-center gap-1">
-              <Eye size={14} />
+              <Eye size={11} />
               {formatNumber(gallery.views)}
             </span>
             <span className="flex items-center gap-1">
-              <Heart size={14} />
+              <Heart size={11} />
               {formatNumber(gallery.likes_count || 0)}
             </span>
           </div>
@@ -69,10 +88,10 @@ export function GalleryCard({ gallery, mode = 'view' }: GalleryCardProps) {
       {mode === 'edit' && (
         <Link
           href={`/g/${gallery.slug}`}
-          className="absolute top-2 right-2 p-2 bg-white/90 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white"
+          className="absolute top-3 right-3 p-2 bg-white/90 backdrop-blur-sm rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white"
           title="View gallery"
         >
-          <ExternalLink size={16} className="text-neutral-600" />
+          <ExternalLink size={14} className="text-neutral-600" />
         </Link>
       )}
     </div>

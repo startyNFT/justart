@@ -6,6 +6,7 @@ import { supabase, GALLERY_CATEGORIES, type Gallery, type GalleryCategory } from
 import { ArrowLeft, Loader2, Eye, Heart, Search, Grid, List, Calendar } from 'lucide-react';
 import { formatNumber, formatDate } from '@/lib/utils';
 import { GalleryThumbnail } from '@/components/GalleryThumbnail';
+import { GalleryCard } from '@/components/GalleryCard';
 
 type GalleryWithLikes = Gallery & { likes_count: number; users?: { wallet_address: string } };
 
@@ -171,33 +172,9 @@ export default function AllGalleriesPage() {
       {/* Gallery display */}
       {filteredGalleries.length > 0 ? (
         viewMode === 'grid' ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
             {filteredGalleries.map((gallery) => (
-              <Link key={gallery.id} href={`/g/${gallery.slug}`} className="group">
-                <div
-                  className="aspect-square rounded-lg overflow-hidden relative"
-                  style={{ backgroundColor: gallery.background_color }}
-                >
-                  <GalleryThumbnail
-                    nftIds={gallery.nft_ids as { contract: string; token_id: string }[]}
-                    backgroundColor={gallery.background_color}
-                    cachedThumbnails={gallery.cached_thumbnails}
-                  />
-                </div>
-                <div className="mt-2 flex items-center justify-between">
-                  <h3 className="font-medium text-neutral-900 truncate">{gallery.name}</h3>
-                  <div className="flex items-center gap-2 text-neutral-400 text-sm">
-                    <span className="flex items-center gap-1">
-                      <Eye size={14} />
-                      {formatNumber(gallery.views)}
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Heart size={14} />
-                      {formatNumber(gallery.likes_count)}
-                    </span>
-                  </div>
-                </div>
-              </Link>
+              <GalleryCard key={gallery.id} gallery={gallery} />
             ))}
           </div>
         ) : (

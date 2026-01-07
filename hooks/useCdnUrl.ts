@@ -1,15 +1,18 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 
 type ImageSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl';
 
 // In-memory cache for signed URLs (persists across component re-renders)
 const urlCache = new Map<string, string>();
+// Track failed URLs to avoid retrying
+const failedUrls = new Set<string>();
 
 /**
  * Hook to get a CDN-signed URL for an image
  * Caches results to avoid repeated API calls
+ * Falls back to original URL if CDN fails
  */
 export function useCdnUrl(
   originalUrl: string | undefined,
@@ -18,8 +21,13 @@ export function useCdnUrl(
   // Initialize with originalUrl so image shows immediately
   const [signedUrl, setSignedUrl] = useState<string>(originalUrl || '');
   const [loading, setLoading] = useState(false);
+  const retryCount = useRef(0);
+  const maxRetries = 2;
 
   useEffect(() => {
+    // Reset retry count when URL changes
+    retryCount.current = 0;
+
     if (!originalUrl) {
       setSignedUrl('');
       return;
@@ -30,6 +38,12 @@ export function useCdnUrl(
     const cached = urlCache.get(cacheKey);
     if (cached) {
       setSignedUrl(cached);
+      return;
+    }
+
+    // Check if this URL has already failed - just use original
+    if (failedUrls.has(cacheKey)) {
+      setSignedUrl(originalUrl);
       return;
     }
 
@@ -58,22 +72,40 @@ export function useCdnUrl(
     }
 
     // Fetch signed URL from API (upgrades to CDN when ready)
-    setLoading(true);
-    fetch(`/api/image?url=${encodeURIComponent(ipfsUrl)}&size=${size}`)
-      .then(res => res.json())
-      .then(data => {
+    const fetchCdnUrl = async () => {
+      setLoading(true);
+      try {
+        const res = await fetch(`/api/image?url=${encodeURIComponent(ipfsUrl)}&size=${size}`);
+        const data = await res.json();
+
         if (data.url) {
           urlCache.set(cacheKey, data.url);
           setSignedUrl(data.url);
+        } else if (retryCount.current < maxRetries) {
+          // Retry on empty response
+          retryCount.current++;
+          await new Promise(resolve => setTimeout(resolve, 500 * retryCount.current));
+          return fetchCdnUrl();
+        } else {
+          // Mark as failed and use original
+          failedUrls.add(cacheKey);
+          setSignedUrl(originalUrl);
         }
-        // Keep original URL if CDN fails (already set above)
-      })
-      .catch(() => {
-        // Keep original URL on error (already set above)
-      })
-      .finally(() => {
+      } catch {
+        if (retryCount.current < maxRetries) {
+          retryCount.current++;
+          await new Promise(resolve => setTimeout(resolve, 500 * retryCount.current));
+          return fetchCdnUrl();
+        }
+        // Keep original URL on final error
+        failedUrls.add(cacheKey);
+        setSignedUrl(originalUrl);
+      } finally {
         setLoading(false);
-      });
+      }
+    };
+
+    fetchCdnUrl();
   }, [originalUrl, size]);
 
   return { url: signedUrl || originalUrl || '', loading };

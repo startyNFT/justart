@@ -467,12 +467,16 @@ export default function EditGallery() {
         error = result.error;
       }
 
-      if (error) throw error;
+      if (error) {
+        console.error('Supabase error:', error);
+        throw error;
+      }
 
       router.push(`/g/${slug}`);
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Error saving gallery:', error);
-      alert('Failed to save gallery. Please try again.');
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      alert(`Failed to save gallery: ${errorMessage}`);
     } finally {
       setSaving(false);
     }

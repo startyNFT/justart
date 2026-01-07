@@ -143,6 +143,12 @@ function mapTokenToNFT(token: {
     imageUrl = token.metadata.image_data as string;
   }
 
+  // Final fallback: use visualAssets if available
+  if (!imageUrl && token.media?.visualAssets) {
+    const va = token.media.visualAssets;
+    imageUrl = va.lg?.url || va.md?.url || va.sm?.url || '';
+  }
+
   // Check if this is an animated image (GIF, APNG, animated WebP)
   const lowerImageUrl = imageUrl.toLowerCase();
   const lowerMediaType = rawMediaType.toLowerCase();
@@ -496,6 +502,12 @@ export async function fetchNFTById(
     }
     if (!imageUrl && data.token.metadata?.image_data) {
       imageUrl = data.token.metadata.image_data as string;
+    }
+
+    // Final fallback: use visualAssets if available
+    if (!imageUrl && data.token.media?.visualAssets) {
+      const va = data.token.media.visualAssets;
+      imageUrl = va.lg?.url || va.md?.url || va.sm?.url || '';
     }
 
     // Check if this is an animated image (GIF, APNG, animated WebP)

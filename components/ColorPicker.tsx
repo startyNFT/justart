@@ -1,11 +1,11 @@
 'use client';
 
 const presetColors = [
+  '#0A0A0A',
+  '#171717',
   '#FFFFFF',
   '#F5F5F5',
   '#E5E5E5',
-  '#171717',
-  '#0A0A0A',
   '#FEF2F2',
   '#FEF9C3',
   '#DCFCE7',

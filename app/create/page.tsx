@@ -51,7 +51,7 @@ export default function CreateGallery() {
   const [selectedNfts, setSelectedNfts] = useState<NFT[]>([]);
   const [size, setSize] = useState<SizeType>('medium');
   const [arrangement, setArrangement] = useState<ArrangementType>('grid');
-  const [backgroundColor, setBackgroundColor] = useState('#FFFFFF');
+  const [backgroundColor, setBackgroundColor] = useState('#0A0A0A');
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [showInfo, setShowInfo] = useState(true);

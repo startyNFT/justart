@@ -7,8 +7,8 @@ import { getStargazeNFTUrl } from '@/lib/utils';
 
 type PresentationViewProps = {
   nfts: NFT[];
-  descriptions?: Record<string, string>; // Map of tokenId to description
-  autoPlayDuration?: number; // Duration in ms for each slide (default 5000)
+  descriptions?: Record<string, string>;
+  autoPlayDuration?: number;
   backgroundColor?: string;
 };
 
@@ -26,26 +26,26 @@ export function PresentationView({
   const progressRef = useRef<number>(0);
   const lastTimeRef = useRef<number>(0);
   const animationRef = useRef<number | null>(null);
+  const touchStartX = useRef<number | null>(null);
 
-  const currentNft = nfts[currentIndex];
-  const isVideo = currentNft?.mediaType === 'video' && currentNft?.animationUrl;
-  const isAudio = currentNft?.mediaType === 'audio' && currentNft?.audioUrl;
-
-  // Get description for current NFT
-  const currentDescription = descriptions[`${currentNft?.collection.contractAddress}-${currentNft?.tokenId}`] || '';
+  const safeNfts = nfts || [];
+  const hasNfts = safeNfts.length > 0;
+  const currentNft = hasNfts ? safeNfts[currentIndex] : null;
 
   // Navigate to next/prev
   const goToNext = useCallback(() => {
-    setCurrentIndex((prev) => (prev + 1) % nfts.length);
+    if (!hasNfts) return;
+    setCurrentIndex((prev) => (prev + 1) % safeNfts.length);
     setProgress(0);
     progressRef.current = 0;
-  }, [nfts.length]);
+  }, [hasNfts, safeNfts.length]);
 
   const goToPrev = useCallback(() => {
-    setCurrentIndex((prev) => (prev - 1 + nfts.length) % nfts.length);
+    if (!hasNfts) return;
+    setCurrentIndex((prev) => (prev - 1 + safeNfts.length) % safeNfts.length);
     setProgress(0);
     progressRef.current = 0;
-  }, [nfts.length]);
+  }, [hasNfts, safeNfts.length]);
 
   const goToIndex = useCallback((index: number) => {
     setCurrentIndex(index);
@@ -53,14 +53,13 @@ export function PresentationView({
     progressRef.current = 0;
   }, []);
 
-  // Toggle play/pause
   const togglePlayPause = useCallback(() => {
     setIsPlaying((prev) => !prev);
   }, []);
 
-  // Auto-advance timer with smooth progress
+  // Auto-advance timer
   useEffect(() => {
-    if (!isPlaying || nfts.length <= 1) return;
+    if (!isPlaying || !hasNfts || safeNfts.length <= 1) return;
 
     lastTimeRef.current = performance.now();
 
@@ -86,7 +85,7 @@ export function PresentationView({
         cancelAnimationFrame(animationRef.current);
       }
     };
-  }, [isPlaying, currentIndex, autoPlayDuration, goToNext, nfts.length]);
+  }, [isPlaying, currentIndex, autoPlayDuration, goToNext, hasNfts, safeNfts.length]);
 
   // Keyboard navigation
   useEffect(() => {
@@ -105,30 +104,6 @@ export function PresentationView({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [goToNext, goToPrev, togglePlayPause]);
-
-  // Touch/swipe support
-  const touchStartX = useRef<number | null>(null);
-
-  const handleTouchStart = (e: React.TouchEvent) => {
-    touchStartX.current = e.touches[0].clientX;
-  };
-
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    if (touchStartX.current === null) return;
-
-    const touchEndX = e.changedTouches[0].clientX;
-    const diff = touchStartX.current - touchEndX;
-
-    if (Math.abs(diff) > 50) {
-      if (diff > 0) {
-        goToNext();
-      } else {
-        goToPrev();
-      }
-    }
-
-    touchStartX.current = null;
-  };
 
   // Hide controls after inactivity
   useEffect(() => {
@@ -155,7 +130,44 @@ export function PresentationView({
     };
   }, []);
 
-  if (!currentNft) return null;
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartX.current === null) return;
+
+    const touchEndX = e.changedTouches[0].clientX;
+    const diff = touchStartX.current - touchEndX;
+
+    if (Math.abs(diff) > 50) {
+      if (diff > 0) {
+        goToNext();
+      } else {
+        goToPrev();
+      }
+    }
+
+    touchStartX.current = null;
+  };
+
+  // Early return AFTER all hooks
+  if (!hasNfts || !currentNft) {
+    return (
+      <div
+        className="fixed inset-0 flex items-center justify-center"
+        style={{ backgroundColor }}
+      >
+        <p className="text-white/60">No NFTs to display</p>
+      </div>
+    );
+  }
+
+  const isVideo = currentNft.mediaType === 'video' && currentNft.animationUrl;
+  const isAudio = currentNft.mediaType === 'audio' && currentNft.audioUrl;
+  const currentDescription = currentNft.collection
+    ? (descriptions[`${currentNft.collection.contractAddress}-${currentNft.tokenId}`] || '')
+    : '';
 
   return (
     <div
@@ -171,7 +183,7 @@ export function PresentationView({
           showControls ? 'opacity-100' : 'opacity-0'
         }`}
       >
-        {nfts.map((_, index) => (
+        {safeNfts.map((_, index) => (
           <button
             key={index}
             onClick={() => goToIndex(index)}
@@ -254,9 +266,7 @@ export function PresentationView({
       </div>
 
       {/* Bottom info panel - always visible */}
-      <div
-        className="absolute bottom-0 left-0 right-0 z-20 p-6 bg-gradient-to-t from-black/80 to-transparent"
-      >
+      <div className="absolute bottom-0 left-0 right-0 z-20 p-6 bg-gradient-to-t from-black/80 to-transparent">
         <div className="max-w-2xl mx-auto text-center">
           {/* Collection name */}
           <h2 className="text-white text-xl font-medium mb-3">
@@ -287,7 +297,6 @@ export function PresentationView({
               </>
             )}
           </button>
-
         </div>
       </div>
     </div>

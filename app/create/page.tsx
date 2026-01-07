@@ -112,28 +112,33 @@ export default function CreateGallery() {
       setLoading(false);
       setLoadingProgress('');
 
-      // Load user data and check payments in parallel
-      const [userResult, paymentInfo] = await Promise.all([
-        supabase
-          .from('users')
-          .select('id')
-          .eq('wallet_address', address!)
-          .single(),
-        fetchPaymentsToTreasury(address!).catch(err => {
-          console.error('Error checking past payments:', err);
-          return { paidSlots: 1 };
-        })
-      ]);
+      // Check payments and user data
+      setCheckingPayments(true);
+      try {
+        const [userResult, paymentInfo] = await Promise.all([
+          supabase
+            .from('users')
+            .select('id')
+            .eq('wallet_address', address!)
+            .single(),
+          fetchPaymentsToTreasury(address!).catch(err => {
+            console.error('Error checking past payments:', err);
+            return { paidSlots: 1 };
+          })
+        ]);
 
-      if (userResult.data) {
-        const { count } = await supabase
-          .from('galleries')
-          .select('*', { count: 'exact', head: true })
-          .eq('user_id', userResult.data.id);
-        setGalleryCount(count || 0);
+        if (userResult.data) {
+          const { count } = await supabase
+            .from('galleries')
+            .select('*', { count: 'exact', head: true })
+            .eq('user_id', userResult.data.id);
+          setGalleryCount(count || 0);
+        }
+
+        setPaidSlots(paymentInfo.paidSlots);
+      } finally {
+        setCheckingPayments(false);
       }
-
-      setPaidSlots(paymentInfo.paidSlots);
     }
 
     loadAllNfts();
@@ -585,7 +590,7 @@ export default function CreateGallery() {
               </div>
               <button
                 onClick={handleCreate}
-                disabled={!name.trim() || creating}
+                disabled={!name.trim() || creating || checkingPayments}
                 className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-neutral-900 text-white rounded-lg hover:bg-neutral-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {creating ? (
@@ -593,10 +598,19 @@ export default function CreateGallery() {
                     <Loader2 size={18} className="animate-spin" />
                     Creating...
                   </>
+                ) : checkingPayments ? (
+                  <>
+                    <Loader2 size={18} className="animate-spin" />
+                    Checking payments...
+                  </>
                 ) : (
                   <>
                     Create Gallery
-                    {effectivePrice > 0 && <span className="text-neutral-400">({effectivePrice} STARS)</span>}
+                    {effectivePrice === 0 ? (
+                      <span className="text-green-400">- Free!</span>
+                    ) : (
+                      <span className="text-neutral-400">({effectivePrice} STARS)</span>
+                    )}
                   </>
                 )}
               </button>

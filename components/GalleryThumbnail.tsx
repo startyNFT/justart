@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { fetchNFTById } from '@/lib/stargaze';
+import { useEffect, useState, useMemo } from 'react';
+import { fetchNFTsById } from '@/lib/stargaze';
 
 type NFTId = {
   contract: string;
@@ -17,37 +17,39 @@ export function GalleryThumbnail({ nftIds, backgroundColor = '#f5f5f5' }: Galler
   const [images, setImages] = useState<(string | null)[]>([null, null, null, null]);
   const [loading, setLoading] = useState(true);
 
+  // Memoize the first 4 NFT IDs to prevent unnecessary re-fetches
+  const first4 = useMemo(() => {
+    if (!nftIds || !Array.isArray(nftIds)) return [];
+    return nftIds.slice(0, 4).filter(nft => nft?.contract && nft?.token_id);
+  }, [nftIds]);
+
   useEffect(() => {
-    // Handle edge cases
-    if (!nftIds || !Array.isArray(nftIds) || nftIds.length === 0) {
+    if (first4.length === 0) {
       setLoading(false);
       return;
     }
 
-    const first4 = nftIds.slice(0, 4);
+    let cancelled = false;
 
     async function fetchImages() {
       try {
-        const results = await Promise.all(
-          first4.map(async (nft) => {
-            try {
-              if (!nft?.contract || !nft?.token_id) return null;
-              const nftData = await fetchNFTById(nft.contract, nft.token_id);
-              return nftData?.thumbnail || nftData?.image || null;
-            } catch {
-              return null;
-            }
-          })
-        );
+        // Fetch all NFTs in parallel using batch function
+        const nfts = await fetchNFTsById(first4);
+        if (cancelled) return;
+
+        // Use thumbnail (small CDN image) for faster loading
+        const results = nfts.map(nft => nft?.thumbnail || nft?.image || null);
         setImages(results);
       } catch {
         // Silently fail
       }
-      setLoading(false);
+      if (!cancelled) setLoading(false);
     }
 
     fetchImages();
-  }, [nftIds]);
+
+    return () => { cancelled = true; };
+  }, [first4]);
 
   // If still loading, show placeholder
   if (loading) {

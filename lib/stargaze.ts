@@ -403,10 +403,32 @@ const TOKEN_BY_ID_QUERY = gql`
   }
 `;
 
+// Cache for individual NFT fetches
+const nftCache = new Map<string, { nft: NFT; timestamp: number }>();
+const NFT_CACHE_TTL = 10 * 60 * 1000; // 10 minutes
+
+function getCachedNFT(contract: string, tokenId: string): NFT | null {
+  const key = `${contract}-${tokenId}`;
+  const cached = nftCache.get(key);
+  if (cached && Date.now() - cached.timestamp < NFT_CACHE_TTL) {
+    return cached.nft;
+  }
+  return null;
+}
+
+function setCachedNFT(contract: string, tokenId: string, nft: NFT) {
+  const key = `${contract}-${tokenId}`;
+  nftCache.set(key, { nft, timestamp: Date.now() });
+}
+
 export async function fetchNFTById(
   contractAddress: string,
   tokenId: string
 ): Promise<NFT | null> {
+  // Check cache first
+  const cached = getCachedNFT(contractAddress, tokenId);
+  if (cached) return cached;
+
   try {
     const data = await client.request<{
       token: {
@@ -474,11 +496,11 @@ export async function fetchNFTById(
       imageUrl = data.token.metadata.image_data as string;
     }
 
-    // Get optimized thumbnail from visualAssets (skip for GIFs to preserve animation)
+    // Get optimized thumbnail from visualAssets - use small for faster loading (skip for GIFs to preserve animation)
     const isGif = imageUrl.toLowerCase().includes('.gif') || rawMediaType.includes('gif');
-    const thumbnail = isGif ? undefined : (data.token.media?.visualAssets?.md?.url || data.token.media?.visualAssets?.lg?.url);
+    const thumbnail = isGif ? undefined : (data.token.media?.visualAssets?.sm?.url || data.token.media?.visualAssets?.md?.url);
 
-    return {
+    const nft: NFT = {
       tokenId: data.token.tokenId,
       name: data.token.name || `#${data.token.tokenId}`,
       description: data.token.description || '',
@@ -489,8 +511,21 @@ export async function fetchNFTById(
       mediaType,
       collection: data.token.collection,
     };
+
+    // Cache the result
+    setCachedNFT(contractAddress, tokenId, nft);
+    return nft;
   } catch (error) {
     console.error('Error fetching NFT:', error);
     return null;
   }
+}
+
+// Fetch multiple NFTs in parallel (for gallery thumbnails)
+export async function fetchNFTsById(
+  nftIds: { contract: string; token_id: string }[]
+): Promise<(NFT | null)[]> {
+  return Promise.all(
+    nftIds.map(({ contract, token_id }) => fetchNFTById(contract, token_id))
+  );
 }

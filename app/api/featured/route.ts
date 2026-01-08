@@ -28,10 +28,7 @@ async function fetchNFTImage(contract: string, tokenId: string): Promise<string 
 
     const data = await res.json();
     const token = data?.data?.token;
-    if (!token) {
-      console.log(`No token found for ${contract}/${tokenId}`);
-      return null;
-    }
+    if (!token) return null;
 
     // Skip audio NFTs
     if (token.media?.type?.includes('audio')) return null;
@@ -66,11 +63,8 @@ export async function GET() {
     }
 
     if (!galleries || galleries.length === 0) {
-      console.log('No galleries found in database');
       return NextResponse.json({ featured: [] });
     }
-
-    console.log(`Found ${galleries.length} galleries`);
 
     // Shuffle and pick 6 galleries
     const shuffled = [...galleries].sort(() => Math.random() - 0.5);
@@ -98,18 +92,11 @@ export async function GET() {
 
       // If no cached thumbnail, fetch from Stargaze
       if (!imageUrl && gallery.nft_ids && Array.isArray(gallery.nft_ids) && gallery.nft_ids.length > 0) {
-        console.log(`Gallery ${gallery.slug}: Fetching images for ${gallery.nft_ids.length} NFTs`);
         // Try first few NFTs until we find an image
         for (const nftId of gallery.nft_ids.slice(0, 4)) {
-          if (!nftId || !nftId.contract || !nftId.token_id) {
-            console.log(`Gallery ${gallery.slug}: Skipping invalid nftId:`, nftId);
-            continue;
-          }
+          if (!nftId || !nftId.contract || !nftId.token_id) continue;
 
-          console.log(`Gallery ${gallery.slug}: Fetching image for ${nftId.contract}/${nftId.token_id}`);
           const img = await fetchNFTImage(nftId.contract, nftId.token_id);
-          console.log(`Gallery ${gallery.slug}: Got image:`, img ? img.substring(0, 50) + '...' : 'null');
-
           if (img) {
             try {
               imageUrl = createCdnUrl(img, 'xl');
@@ -139,8 +126,6 @@ export async function GET() {
 
     // Filter out galleries without images
     const validFeatured = featured.filter(item => item.imageUrl);
-
-    console.log(`Returning ${validFeatured.length} featured galleries with images`);
 
     return NextResponse.json(
       { featured: validFeatured },

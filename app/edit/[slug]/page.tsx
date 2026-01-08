@@ -469,13 +469,20 @@ export default function EditGallery() {
 
       if (error) {
         console.error('Supabase error:', error);
-        throw error;
+        throw new Error(error.message || JSON.stringify(error));
       }
 
       router.push(`/g/${slug}`);
     } catch (error: unknown) {
       console.error('Error saving gallery:', error);
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      let errorMessage = 'Unknown error';
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      } else if (typeof error === 'object' && error !== null) {
+        errorMessage = JSON.stringify(error);
+      } else {
+        errorMessage = String(error);
+      }
       alert(`Failed to save gallery: ${errorMessage}`);
     } finally {
       setSaving(false);

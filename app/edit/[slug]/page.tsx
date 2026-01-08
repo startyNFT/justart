@@ -8,7 +8,7 @@ import { SortableNFTGrid } from '@/components/SortableNFTGrid';
 import { SizePicker, ArrangementPicker } from '@/components/LayoutPicker';
 import { ColorPicker } from '@/components/ColorPicker';
 import { MusicPicker } from '@/components/MusicPicker';
-import { CustomRowEditor, type RowConfig, rowConfigsToRowCounts, getRowHeights } from '@/components/CustomRowEditor';
+import { CustomRowEditor, type RowConfig, rowConfigsToRowCounts } from '@/components/CustomRowEditor';
 import { fetchNFTPage, fetchNFTById, PAGE_SIZE, type NFT } from '@/lib/stargaze';
 import { supabase, GALLERY_CATEGORIES, type Gallery, type GalleryCategory } from '@/lib/supabase';
 import type { SizeType, ArrangementType, MusicTrack } from '@/lib/constants';
@@ -450,7 +450,6 @@ export default function EditGallery() {
 
       // Optional columns that may not exist in the database
       const optionalColumns = {
-        row_heights: getRowHeights(rowConfigs),
         lock_layout: lockLayout,
         category: category,
       };
@@ -1043,7 +1042,7 @@ export default function EditGallery() {
                       size={size}
                       arrangement="justified"
                       customRowCounts={rowConfigsToRowCounts(rowConfigs)}
-                      rowHeights={getRowHeights(rowConfigs)}
+                      rowHeights={undefined}
                     />
                   </div>
                 </div>

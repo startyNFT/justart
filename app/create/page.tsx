@@ -9,7 +9,7 @@ import { SizePicker, ArrangementPicker } from '@/components/LayoutPicker';
 import { ColorPicker } from '@/components/ColorPicker';
 import { MusicPicker } from '@/components/MusicPicker';
 import { ConnectWalletButton } from '@/components/ConnectWalletButton';
-import { CustomRowEditor, type RowConfig, rowConfigsToRowCounts, getRowHeights } from '@/components/CustomRowEditor';
+import { CustomRowEditor, type RowConfig, rowConfigsToRowCounts } from '@/components/CustomRowEditor';
 import { fetchNFTPage, PAGE_SIZE, FAST_INITIAL_SIZE, type NFT } from '@/lib/stargaze';
 import { supabase, GALLERY_CATEGORIES, type GalleryCategory } from '@/lib/supabase';
 import { generateSlug } from '@/lib/utils';
@@ -479,7 +479,6 @@ export default function CreateGallery() {
       const optionalColumns: Record<string, unknown> = {
         lock_layout: lockLayout,
         category,
-        ...(rowConfigs ? { row_heights: getRowHeights(rowConfigs) } : {}),
       };
 
       // Try with all columns first
@@ -1022,7 +1021,7 @@ export default function CreateGallery() {
                       size={size}
                       arrangement="justified"
                       customRowCounts={rowConfigsToRowCounts(rowConfigs)}
-                      rowHeights={getRowHeights(rowConfigs)}
+                      rowHeights={undefined}
                     />
                   </div>
                 </div>

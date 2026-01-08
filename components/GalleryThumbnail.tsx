@@ -159,24 +159,46 @@ export function GalleryThumbnail({ nftIds, backgroundColor = '#f5f5f5', cachedTh
     );
   }
 
-  // Horizontal mode - single large image
+  // Horizontal mode - 3 vertical strips (triptych)
   if (horizontal) {
-    return (
-      <div className="w-full h-full relative">
-        <img
-          src={images[0]}
-          alt=""
-          className="absolute inset-0 w-full h-full object-cover"
-          loading="lazy"
-        />
-        {/* Video indicator */}
-        {isVideoOnly && (
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div className="w-10 h-10 bg-black/40 rounded-full flex items-center justify-center">
-              <div className="w-0 h-0 border-t-[6px] border-t-transparent border-l-[10px] border-l-white border-b-[6px] border-b-transparent ml-0.5" />
+    // If only 1 image, show it full
+    if (images.length === 1) {
+      return (
+        <div className="w-full h-full relative">
+          <img
+            src={images[0]}
+            alt=""
+            className="absolute inset-0 w-full h-full object-cover"
+            loading="lazy"
+          />
+          {isVideoOnly && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div className="w-10 h-10 bg-black/40 rounded-full flex items-center justify-center">
+                <div className="w-0 h-0 border-t-[6px] border-t-transparent border-l-[10px] border-l-white border-b-[6px] border-b-transparent ml-0.5" />
+              </div>
             </div>
+          )}
+        </div>
+      );
+    }
+
+    // Show 3 vertical strips
+    return (
+      <div className="w-full h-full grid grid-cols-3 gap-0.5" style={{ backgroundColor }}>
+        {[0, 1, 2].map((i) => (
+          <div key={i} className="relative overflow-hidden">
+            {images[i] ? (
+              <img
+                src={images[i]}
+                alt=""
+                className="absolute inset-0 w-full h-full object-cover"
+                loading="lazy"
+              />
+            ) : (
+              <div className="w-full h-full" style={{ backgroundColor }} />
+            )}
           </div>
-        )}
+        ))}
       </div>
     );
   }

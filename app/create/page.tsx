@@ -1086,7 +1086,7 @@ export default function CreateGallery() {
               size={size}
               arrangement={arrangement}
               customRowCounts={arrangement === 'justified' ? rowConfigsToRowCounts(rowConfigs) : undefined}
-              rowHeights={arrangement === 'justified' ? getRowHeights(rowConfigs) : undefined}
+              rowHeights={undefined}
             />
             {selectedNfts.length > (size === 'small' ? 12 : size === 'medium' ? 8 : 4) && (
               <p className="text-center text-neutral-400 text-sm mt-4">

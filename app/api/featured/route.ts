@@ -79,8 +79,8 @@ export async function GET() {
     for (const gallery of galleries) {
       const thumbnails = gallery.cached_thumbnails || [];
 
-      // Add all cached thumbnails to the pool
-      for (const rawUrl of thumbnails) {
+      // Add first 4 cached thumbnails to the pool (limit for performance)
+      for (const rawUrl of thumbnails.slice(0, 4)) {
         if (!rawUrl) continue;
         try {
           const imageUrl = createCdnUrl(rawUrl, 'xl');

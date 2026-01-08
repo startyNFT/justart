@@ -149,7 +149,7 @@ export async function GET() {
       { featured },
       {
         headers: {
-          'Cache-Control': 'public, s-maxage=10, stale-while-revalidate=5',
+          'Cache-Control': 'no-store, no-cache, must-revalidate',
         },
       }
     );

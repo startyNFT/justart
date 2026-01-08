@@ -18,7 +18,8 @@ export default function Home() {
 
   const loadFeatured = async () => {
     try {
-      const res = await fetch('/api/featured');
+      // Add cache-busting to ensure fresh random results
+      const res = await fetch(`/api/featured?t=${Date.now()}`, { cache: 'no-store' });
       const data = await res.json();
       return data.featured || [];
     } catch {

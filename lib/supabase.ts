@@ -3,10 +3,10 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
-// Create client only if env vars are set (prevents build-time errors on Vercel)
+// Lazy singleton - only create client when actually used (not at build time)
 let _supabase: SupabaseClient | null = null;
 
-function getSupabaseClient(): SupabaseClient {
+function getSupabase(): SupabaseClient {
   if (!_supabase) {
     if (!supabaseUrl || !supabaseAnonKey) {
       throw new Error('Supabase environment variables not set. Please configure NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.');
@@ -16,17 +16,22 @@ function getSupabaseClient(): SupabaseClient {
   return _supabase;
 }
 
-// Proxy object that lazily creates the client on first use
-export const supabase = new Proxy({} as SupabaseClient, {
-  get(_, prop) {
-    const client = getSupabaseClient();
-    const value = client[prop as keyof SupabaseClient];
-    if (typeof value === 'function') {
-      return value.bind(client);
+// Export as a getter property for seamless usage
+export const supabase = {
+  from: (...args: Parameters<SupabaseClient['from']>) => getSupabase().from(...args),
+  auth: new Proxy({} as SupabaseClient['auth'], {
+    get(_, prop) {
+      const auth = getSupabase().auth;
+      const value = auth[prop as keyof typeof auth];
+      return typeof value === 'function' ? value.bind(auth) : value;
     }
-    return value;
-  }
-});
+  }),
+  rpc: (...args: Parameters<SupabaseClient['rpc']>) => getSupabase().rpc(...args),
+  channel: (...args: Parameters<SupabaseClient['channel']>) => getSupabase().channel(...args),
+  removeChannel: (...args: Parameters<SupabaseClient['removeChannel']>) => getSupabase().removeChannel(...args),
+  removeAllChannels: () => getSupabase().removeAllChannels(),
+  getChannels: () => getSupabase().getChannels(),
+};
 
 export type User = {
   id: string;

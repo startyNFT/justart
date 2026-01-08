@@ -141,9 +141,19 @@ export async function GET() {
       }
     }
 
-    // Shuffle the entire pool and pick 6 random images
+    // Shuffle the entire pool
     const shuffled = [...imagePool].sort(() => Math.random() - 0.5);
-    const featured = shuffled.slice(0, 6);
+
+    // Pick up to 6 images, but only one per gallery
+    const featured: FeaturedImage[] = [];
+    const seenGalleries = new Set<string>();
+
+    for (const item of shuffled) {
+      if (seenGalleries.has(item.id)) continue;
+      seenGalleries.add(item.id);
+      featured.push(item);
+      if (featured.length >= 6) break;
+    }
 
     return NextResponse.json(
       { featured },

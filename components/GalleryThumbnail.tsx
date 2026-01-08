@@ -60,24 +60,24 @@ export function GalleryThumbnail({ nftIds, backgroundColor = '#f5f5f5', cachedTh
   // Use cached thumbnails if available
   const hasCachedThumbnails = cachedThumbnails && cachedThumbnails.length > 0;
 
-  // Get exactly the first 4 NFT IDs in user's order
+  // Get exactly the first 3 NFT IDs in user's order (for vertical triptych)
   const nftIdsToFetch = useMemo(() => {
     if (hasCachedThumbnails) return []; // Don't fetch if we have cached thumbnails
     if (!nftIds || !Array.isArray(nftIds)) return [];
-    return nftIds.slice(0, 4).filter(nft => nft?.contract && nft?.token_id);
+    return nftIds.slice(0, 3).filter(nft => nft?.contract && nft?.token_id);
   }, [nftIds, hasCachedThumbnails]);
 
   useEffect(() => {
     // If we have cached thumbnails, use them directly
     if (hasCachedThumbnails) {
-      // Convert cached URLs to CDN URLs
-      Promise.all(cachedThumbnails.slice(0, 4).map(getCdnUrl))
+      // Convert cached URLs to CDN URLs (first 3 for triptych)
+      Promise.all(cachedThumbnails.slice(0, 3).map(getCdnUrl))
         .then(cdnUrls => {
           setImages(cdnUrls);
           setLoading(false);
         })
         .catch(() => {
-          setImages(cachedThumbnails.slice(0, 4));
+          setImages(cachedThumbnails.slice(0, 3));
           setLoading(false);
         });
       return;
@@ -201,10 +201,10 @@ export function GalleryThumbnail({ nftIds, backgroundColor = '#f5f5f5', cachedTh
     );
   }
 
-  // Regular 2x2 grid for images (square mode)
+  // Vertical triptych - 3 columns
   return (
-    <div className="w-full h-full grid grid-cols-2 gap-0.5" style={{ backgroundColor }}>
-      {[0, 1, 2, 3].map((i) => (
+    <div className="w-full h-full grid grid-cols-3 gap-0.5" style={{ backgroundColor }}>
+      {[0, 1, 2].map((i) => (
         <div key={i} className="relative overflow-hidden">
           {images[i] ? (
             <img

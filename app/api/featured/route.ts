@@ -46,7 +46,7 @@ async function fetchNFTImage(contract: string, tokenId: string): Promise<string 
   }
 }
 
-export const revalidate = 10; // Cache for 10 seconds for fresher data
+export const dynamic = 'force-dynamic'; // Prevent static generation at build time
 
 export async function GET() {
   // Get all galleries (with or without cached_thumbnails)

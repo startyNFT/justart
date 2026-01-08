@@ -7,8 +7,8 @@ async function fetchNFTImage(contract: string, tokenId: string): Promise<{ image
   const query = `
     query Token($collectionAddr: String!, $tokenId: String!) {
       token(collectionAddr: $collectionAddr, tokenId: $tokenId) {
+        imageUrl
         media { url type }
-        image { baseUrl }
       }
     }
   `;
@@ -28,7 +28,7 @@ async function fetchNFTImage(contract: string, tokenId: string): Promise<{ image
     if (!token) return { image: null, mediaType: null };
 
     const mediaType = token.media?.type || 'image';
-    const image = token.media?.url || token.image?.baseUrl;
+    const image = token.imageUrl || token.media?.url;
 
     return { image, mediaType };
   } catch {

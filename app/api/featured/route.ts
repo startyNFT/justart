@@ -9,9 +9,9 @@ async function fetchNFTImage(contract: string, tokenId: string): Promise<string 
   const query = `
     query Token($collectionAddr: String!, $tokenId: String!) {
       token(collectionAddr: $collectionAddr, tokenId: $tokenId) {
+        name
+        imageUrl
         media { url type visualAssets { lg { url } md { url } } }
-        image { baseUrl }
-        metadata
       }
     }
   `;
@@ -28,17 +28,19 @@ async function fetchNFTImage(contract: string, tokenId: string): Promise<string 
 
     const data = await res.json();
     const token = data?.data?.token;
-    if (!token) return null;
+    if (!token) {
+      console.log(`No token found for ${contract}/${tokenId}`);
+      return null;
+    }
 
     // Skip audio NFTs
     if (token.media?.type?.includes('audio')) return null;
 
-    // Try multiple sources for image
-    const image = token.media?.visualAssets?.lg?.url
+    // Try multiple sources for image (updated for new schema)
+    const image = token.imageUrl
+      || token.media?.visualAssets?.lg?.url
       || token.media?.visualAssets?.md?.url
-      || token.media?.url
-      || token.image?.baseUrl
-      || token.metadata?.image;
+      || token.media?.url;
 
     return image || null;
   } catch (err) {
@@ -96,11 +98,18 @@ export async function GET() {
 
       // If no cached thumbnail, fetch from Stargaze
       if (!imageUrl && gallery.nft_ids && Array.isArray(gallery.nft_ids) && gallery.nft_ids.length > 0) {
+        console.log(`Gallery ${gallery.slug}: Fetching images for ${gallery.nft_ids.length} NFTs`);
         // Try first few NFTs until we find an image
         for (const nftId of gallery.nft_ids.slice(0, 4)) {
-          if (!nftId || !nftId.contract || !nftId.token_id) continue;
+          if (!nftId || !nftId.contract || !nftId.token_id) {
+            console.log(`Gallery ${gallery.slug}: Skipping invalid nftId:`, nftId);
+            continue;
+          }
 
+          console.log(`Gallery ${gallery.slug}: Fetching image for ${nftId.contract}/${nftId.token_id}`);
           const img = await fetchNFTImage(nftId.contract, nftId.token_id);
+          console.log(`Gallery ${gallery.slug}: Got image:`, img ? img.substring(0, 50) + '...' : 'null');
+
           if (img) {
             try {
               imageUrl = createCdnUrl(img, 'xl');

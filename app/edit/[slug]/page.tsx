@@ -435,9 +435,8 @@ export default function EditGallery() {
 
       const layout = `${size}-${arrangement}`;
 
-      // Try with lock_layout first, fallback without if column doesn't exist
-      let error;
-      const updateData: Record<string, unknown> = {
+      // Base update data (columns that always exist)
+      const baseData: Record<string, unknown> = {
         name: name.trim(),
         description: description.trim() || null,
         background_color: backgroundColor,
@@ -446,30 +445,34 @@ export default function EditGallery() {
         show_info: showInfo,
         music_track: musicTrack ? JSON.stringify(musicTrack) : null,
         custom_row_counts: rowConfigsToRowCounts(rowConfigs),
-        row_heights: getRowHeights(rowConfigs),
         cached_thumbnails: cachedThumbnails.length > 0 ? cachedThumbnails : null,
       };
 
-      // Try with lock_layout
-      const result = await supabase
+      // Optional columns that may not exist in the database
+      const optionalColumns = {
+        row_heights: getRowHeights(rowConfigs),
+        lock_layout: lockLayout,
+        category: category,
+      };
+
+      // Try with all columns first
+      let result = await supabase
         .from('galleries')
-        .update({ ...updateData, lock_layout: lockLayout, category })
+        .update({ ...baseData, ...optionalColumns })
         .eq('id', gallery.id);
 
-      if (result.error?.message?.includes('lock_layout')) {
-        // Column doesn't exist, try without it
-        const fallbackResult = await supabase
+      // If error mentions a missing column, retry without optional columns
+      if (result.error?.message?.includes('column') || result.error?.message?.includes('schema cache')) {
+        console.log('Retrying save without optional columns...');
+        result = await supabase
           .from('galleries')
-          .update(updateData)
+          .update(baseData)
           .eq('id', gallery.id);
-        error = fallbackResult.error;
-      } else {
-        error = result.error;
       }
 
-      if (error) {
-        console.error('Supabase error:', error);
-        throw new Error(error.message || JSON.stringify(error));
+      if (result.error) {
+        console.error('Supabase error:', result.error);
+        throw new Error(result.error.message || JSON.stringify(result.error));
       }
 
       router.push(`/g/${slug}`);

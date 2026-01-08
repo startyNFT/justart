@@ -459,7 +459,8 @@ export default function CreateGallery() {
       const slug = generateSlug();
       const layout = `${size}-${arrangement}`;
 
-      const insertData: Record<string, unknown> = {
+      // Base insert data (columns that always exist)
+      const baseData: Record<string, unknown> = {
         user_id: userId,
         slug,
         name: name.trim(),
@@ -469,14 +470,26 @@ export default function CreateGallery() {
         nft_ids: nftIds,
         payment_tx_hash: txHash,
         show_info: showInfo,
-        lock_layout: lockLayout,
-        category,
         cached_thumbnails: cachedThumbnails.length > 0 ? cachedThumbnails : null,
         ...(musicTrack ? { music_track: JSON.stringify(musicTrack) } : {}),
-        ...(rowConfigs ? { custom_row_counts: rowConfigsToRowCounts(rowConfigs), row_heights: getRowHeights(rowConfigs) } : {}),
+        ...(rowConfigs ? { custom_row_counts: rowConfigsToRowCounts(rowConfigs) } : {}),
       };
 
-      const result = await supabase.from('galleries').insert(insertData);
+      // Optional columns that may not exist in the database
+      const optionalColumns: Record<string, unknown> = {
+        lock_layout: lockLayout,
+        category,
+        ...(rowConfigs ? { row_heights: getRowHeights(rowConfigs) } : {}),
+      };
+
+      // Try with all columns first
+      let result = await supabase.from('galleries').insert({ ...baseData, ...optionalColumns });
+
+      // If error mentions a missing column, retry without optional columns
+      if (result.error?.message?.includes('column') || result.error?.message?.includes('schema cache')) {
+        console.log('Retrying insert without optional columns...');
+        result = await supabase.from('galleries').insert(baseData);
+      }
 
       if (result.error) {
         console.error('Supabase error:', result.error);

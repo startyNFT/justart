@@ -48,6 +48,13 @@ async function fetchNFTImage(contract: string, tokenId: string): Promise<string 
 
 export const dynamic = 'force-dynamic'; // Prevent static generation at build time
 
+type FeaturedImage = {
+  id: string;
+  slug: string;
+  name: string;
+  imageUrl: string;
+};
+
 export async function GET() {
   try {
     // Get all galleries (with or without cached_thumbnails)
@@ -66,69 +73,80 @@ export async function GET() {
       return NextResponse.json({ featured: [] });
     }
 
-    // Shuffle and pick 6 galleries
-    const shuffled = [...galleries].sort(() => Math.random() - 0.5);
-    const selected = shuffled.slice(0, 6);
+    // Collect ALL images from all galleries into a pool
+    const imagePool: FeaturedImage[] = [];
 
-    // Build featured list, fetching images if needed
-    const featured = await Promise.all(selected.map(async (gallery) => {
-      let imageUrl: string | null = null;
-
-      // Try cached thumbnails first
+    for (const gallery of galleries) {
       const thumbnails = gallery.cached_thumbnails || [];
-      if (thumbnails.length > 0) {
-        const randomIndex = Math.floor(Math.random() * thumbnails.length);
-        const rawUrl = thumbnails[randomIndex];
-        if (rawUrl) {
-          try {
-            imageUrl = createCdnUrl(rawUrl, 'xl');
-          } catch (err) {
-            console.error('CDN URL creation failed:', err);
-            // Use raw URL as fallback
-            imageUrl = rawUrl;
-          }
+
+      // Add all cached thumbnails to the pool
+      for (const rawUrl of thumbnails) {
+        if (!rawUrl) continue;
+        try {
+          const imageUrl = createCdnUrl(rawUrl, 'xl');
+          imagePool.push({
+            id: gallery.id,
+            slug: gallery.slug,
+            name: gallery.name,
+            imageUrl,
+          });
+        } catch {
+          // Use raw URL as fallback
+          imagePool.push({
+            id: gallery.id,
+            slug: gallery.slug,
+            name: gallery.name,
+            imageUrl: rawUrl,
+          });
         }
       }
 
-      // If no cached thumbnail, fetch from Stargaze
-      if (!imageUrl && gallery.nft_ids && Array.isArray(gallery.nft_ids) && gallery.nft_ids.length > 0) {
-        // Try first few NFTs until we find an image
+      // If no cached thumbnails, fetch from Stargaze (up to 4 images per gallery)
+      if (thumbnails.length === 0 && gallery.nft_ids && Array.isArray(gallery.nft_ids) && gallery.nft_ids.length > 0) {
+        const fetchedImages: string[] = [];
+
         for (const nftId of gallery.nft_ids.slice(0, 4)) {
           if (!nftId || !nftId.contract || !nftId.token_id) continue;
 
           const img = await fetchNFTImage(nftId.contract, nftId.token_id);
           if (img) {
+            fetchedImages.push(img);
             try {
-              imageUrl = createCdnUrl(img, 'xl');
+              const imageUrl = createCdnUrl(img, 'xl');
+              imagePool.push({
+                id: gallery.id,
+                slug: gallery.slug,
+                name: gallery.name,
+                imageUrl,
+              });
             } catch {
-              imageUrl = img; // Fallback to raw URL
+              imagePool.push({
+                id: gallery.id,
+                slug: gallery.slug,
+                name: gallery.name,
+                imageUrl: img,
+              });
             }
-
-            // Cache for future (fire and forget)
-            supabase
-              .from('galleries')
-              .update({ cached_thumbnails: [img] })
-              .eq('id', gallery.id)
-              .then(() => {});
-
-            break;
           }
         }
+
+        // Cache fetched images for future (fire and forget)
+        if (fetchedImages.length > 0) {
+          supabase
+            .from('galleries')
+            .update({ cached_thumbnails: fetchedImages })
+            .eq('id', gallery.id)
+            .then(() => {});
+        }
       }
+    }
 
-      return {
-        id: gallery.id,
-        slug: gallery.slug,
-        name: gallery.name,
-        imageUrl,
-      };
-    }));
-
-    // Filter out galleries without images
-    const validFeatured = featured.filter(item => item.imageUrl);
+    // Shuffle the entire pool and pick 6 random images
+    const shuffled = [...imagePool].sort(() => Math.random() - 0.5);
+    const featured = shuffled.slice(0, 6);
 
     return NextResponse.json(
-      { featured: validFeatured },
+      { featured },
       {
         headers: {
           'Cache-Control': 'public, s-maxage=10, stale-while-revalidate=5',

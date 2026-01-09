@@ -63,7 +63,7 @@ export default function CreateGallery() {
   // Use shared NFT filters hook for search and filtering
   const filters = useNFTFilters({
     nfts: allLoadedNfts.length > 0 ? allLoadedNfts : pageNfts,
-    hideDuplicates: true,
+    hideDuplicates,
   });
 
   // Use shared loading progress hook
@@ -74,6 +74,7 @@ export default function CreateGallery() {
   const [checkingPayments, setCheckingPayments] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [backgroundLoadingProgress, setBackgroundLoadingProgress] = useState('');
+  const [hideDuplicates, setHideDuplicates] = useState(true);
 
   // Background loading ref to prevent duplicate loads
   const backgroundLoadingRef = useRef(false);
@@ -87,7 +88,7 @@ export default function CreateGallery() {
   const hasCredit = paidSlots > galleryCount;
 
   const selectedIds = new Set(
-    form.form.selectedNfts.map((nft) => `${nft.collection.contractAddress}-${nft.tokenId}`)
+    form.selectedNfts.map((nft) => `${nft.collection.contractAddress}-${nft.tokenId}`)
   );
 
   useEffect(() => {
@@ -291,7 +292,7 @@ export default function CreateGallery() {
   };
 
   const handleCreate = async () => {
-    if (!address || form.form.selectedNfts.length === 0 || !form.name.trim()) return;
+    if (!address || form.selectedNfts.length === 0 || !form.name.trim()) return;
 
     setCreating(true);
 
@@ -332,7 +333,7 @@ export default function CreateGallery() {
         userId = newUser.id;
       }
 
-      const nftIds = form.form.selectedNfts.map((nft) => {
+      const nftIds = form.selectedNfts.map((nft) => {
         const key = `${nft.collection.contractAddress}-${nft.tokenId}`;
         const desc = form.nftDescriptions[key];
         return {
@@ -680,8 +681,8 @@ export default function CreateGallery() {
                           if (form.size === 'medium') return 15; // 5 cols × 3 rows
                           return 24;                         // 8 cols × 3 rows
                         })())}
-                        size={size}
-                        arrangement={arrangement}
+                        size={form.size}
+                        arrangement={form.arrangement}
                       />
                     )}
                     {isSample && (
@@ -831,7 +832,7 @@ export default function CreateGallery() {
           {/* NFT Grid */}
           {(loading || loadingCollection) && pageNfts.length === 0 ? (
             <SkeletonGrid count={20} />
-          ) : displayNfts.length > 0 ? (
+          ) : filters.displayNfts.length > 0 ? (
             <NFTGrid
               nfts={filters.displayNfts}
               size="medium"
@@ -900,12 +901,12 @@ export default function CreateGallery() {
             <div className="space-y-6">
               <div className="p-4 bg-neutral-50 rounded-xl">
                 <CustomRowEditor
-                  nfts={selectedNfts}
+                  nfts={form.selectedNfts}
                   rowConfigs={form.rowConfigs}
                   onChange={form.setRowConfigs}
-                  onReorder={setSelectedNfts}
+                  onReorder={form.setSelectedNfts}
                   onRemove={handleRemoveNft}
-                  size={size}
+                  size={form.size}
                 />
               </div>
 
@@ -915,8 +916,8 @@ export default function CreateGallery() {
                   <p className="text-sm text-neutral-500 mb-3">Preview</p>
                   <div className="p-4 rounded-xl" style={{ backgroundColor: form.backgroundColor }}>
                     <NFTGrid
-                      nfts={selectedNfts}
-                      size={size}
+                      nfts={form.selectedNfts}
+                      size={form.size}
                       arrangement="justified"
                       customRowCounts={rowConfigsToRowCounts(form.rowConfigs)}
                       rowHeights={undefined}
@@ -927,8 +928,8 @@ export default function CreateGallery() {
             </div>
           ) : (
             <SortableNFTGrid
-              nfts={selectedNfts}
-              onReorder={setSelectedNfts}
+              nfts={form.selectedNfts}
+              onReorder={form.setSelectedNfts}
               onRemove={handleRemoveNft}
             />
           )}
@@ -978,8 +979,8 @@ export default function CreateGallery() {
             <p className="text-sm text-neutral-500 mb-4">Preview</p>
             <NFTGrid
               nfts={form.selectedNfts.slice(0, form.size === 'small' ? 12 : form.size === 'medium' ? 8 : 4)}
-              size={size}
-              arrangement={arrangement}
+              size={form.size}
+              arrangement={form.arrangement}
               customRowCounts={form.arrangement === 'justified' ? rowConfigsToRowCounts(form.rowConfigs) : undefined}
               rowHeights={undefined}
             />
@@ -995,7 +996,7 @@ export default function CreateGallery() {
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
                 <span className="text-neutral-500">Name</span>
-                <p className="font-medium">{name || 'Untitled'}</p>
+                <p className="font-medium">{form.name || 'Untitled'}</p>
               </div>
               <div>
                 <span className="text-neutral-500">NFTs</span>
@@ -1003,7 +1004,7 @@ export default function CreateGallery() {
               </div>
               <div>
                 <span className="text-neutral-500">Layout</span>
-                <p className="font-medium capitalize">{size} / {arrangement}</p>
+                <p className="font-medium capitalize">{form.size} / {form.arrangement}</p>
               </div>
               <div>
                 <span className="text-neutral-500">Background</span>
@@ -1050,7 +1051,7 @@ export default function CreateGallery() {
             </div>
             <button
               onClick={handleCreate}
-              disabled={!name.trim() || creating || checkingPayments || form.selectedNfts.length === 0}
+              disabled={!form.name.trim() || creating || checkingPayments || form.selectedNfts.length === 0}
               className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-neutral-900 text-white rounded-lg hover:bg-neutral-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {creating ? (
@@ -1074,7 +1075,7 @@ export default function CreateGallery() {
                 </>
               )}
             </button>
-            {!name.trim() && (
+            {!form.name.trim() && (
               <p className="text-center text-amber-600 text-sm mt-2">
                 Please add a gallery name in the Customize tab
               </p>

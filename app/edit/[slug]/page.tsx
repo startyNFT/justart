@@ -11,6 +11,7 @@ import { MusicPicker } from '@/components/MusicPicker';
 import { CustomRowEditor, type RowConfig, rowConfigsToRowCounts } from '@/components/CustomRowEditor';
 import { fetchNFTPage, fetchNFTById, PAGE_SIZE, type NFT } from '@/lib/stargaze';
 import { supabase, GALLERY_CATEGORIES, type Gallery, type GalleryCategory } from '@/lib/supabase';
+import { CONCURRENT_REQUESTS } from '@/lib/constants';
 import type { SizeType, ArrangementType, MusicTrack } from '@/lib/constants';
 import { Loader2, ArrowLeft, Save, Trash2, Lock, Unlock, Search, Filter, X, ChevronLeft, ChevronRight, Layers } from 'lucide-react';
 
@@ -118,7 +119,6 @@ export default function EditGallery() {
     setAudioNfts(firstPageAudio);
 
     const pagesToLoad = Math.ceil(totalCount / PAGE_SIZE);
-    const CONCURRENT_REQUESTS = 6;
     let loadedNfts = [...firstPageNfts];
     let loadedAudioNfts = [...firstPageAudio];
 

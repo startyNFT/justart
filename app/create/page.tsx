@@ -13,7 +13,7 @@ import { CustomRowEditor, type RowConfig, rowConfigsToRowCounts } from '@/compon
 import { fetchNFTPage, PAGE_SIZE, FAST_INITIAL_SIZE, type NFT } from '@/lib/stargaze';
 import { supabase, GALLERY_CATEGORIES, type GalleryCategory } from '@/lib/supabase';
 import { generateSlug } from '@/lib/utils';
-import { TREASURY_WALLET } from '@/lib/constants';
+import { TREASURY_WALLET, CONCURRENT_REQUESTS, LARGE_COLLECTION_THRESHOLD } from '@/lib/constants';
 import { fetchPaymentsToTreasury, calculateEffectivePrice, PUREART_MEMO_PREFIX } from '@/lib/cosmos';
 import type { SizeType, ArrangementType, MusicTrack } from '@/lib/constants';
 import { Wallet, Loader2, ArrowRight, ArrowLeft, Layers, Gift, Lock, Unlock, Search, Filter, X, ChevronLeft, ChevronRight } from 'lucide-react';
@@ -228,7 +228,6 @@ export default function CreateGallery() {
     setAudioNfts(firstPageAudio);
 
     const pagesToLoad = Math.ceil(totalCount / PAGE_SIZE);
-    const CONCURRENT_REQUESTS = 6;
     let loadedNfts = [...firstPageNfts];
     let loadedAudioNfts = [...firstPageAudio];
 

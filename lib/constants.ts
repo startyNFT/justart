@@ -14,6 +14,8 @@ export const MINIMUM_PAYMENT_AMOUNT = 1000; // Minimum STARS to count as gallery
 export const PAGE_SIZE = 75; // NFTs per page from Stargaze API
 export const FAST_INITIAL_SIZE = 12; // Quick first load for instant UI feedback
 export const CONCURRENT_REQUESTS = 6; // Parallel API requests for background loading
+export const PREFETCH_PAGES_AHEAD = 5; // Number of pages to prefetch ahead of current page
+export const LARGE_COLLECTION_THRESHOLD = 300; // NFTs count to trigger lazy loading
 
 // API Retry Configuration
 export const MAX_RETRIES = 3; // Maximum retry attempts for failed API calls

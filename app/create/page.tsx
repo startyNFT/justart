@@ -36,6 +36,19 @@ function SkeletonGrid({ count = 20 }: { count?: number }) {
   );
 }
 
+// Sanitize image URLs to prevent XSS attacks
+function sanitizeImageUrl(url: string): string {
+  if (!url) return '';
+  try {
+    const parsed = new URL(url);
+    // Only allow safe protocols
+    return ['http:', 'https:', 'ipfs:', 'ar:'].includes(parsed.protocol) ? url : '';
+  } catch {
+    // Invalid URL
+    return '';
+  }
+}
+
 export default function CreateGallery() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -87,8 +100,12 @@ export default function CreateGallery() {
   const effectivePrice = calculateEffectivePrice(galleryCount, paidSlots);
   const hasCredit = paidSlots > galleryCount;
 
-  const selectedIds = new Set(
-    form.selectedNfts.map((nft) => `${nft.collection.contractAddress}-${nft.tokenId}`)
+  // Memoize selectedIds to prevent unnecessary re-renders
+  const selectedIds = useMemo(
+    () => new Set(
+      form.selectedNfts.map((nft) => `${nft.collection.contractAddress}-${nft.tokenId}`)
+    ),
+    [form.selectedNfts]
   );
 
   useEffect(() => {
@@ -101,33 +118,42 @@ export default function CreateGallery() {
     nftCollectionLoaded.current = true;
     setLoadingCollection(true);
 
-    // First: Quick fetch of 12 NFTs to show immediately
-    const fastResult = await fetchNFTPage(walletAddress, 0, FAST_INITIAL_SIZE);
-    if (fastResult.nfts.length > 0) {
-      setPageNfts(fastResult.nfts);
-      setTotal(fastResult.total);
-      setLoadingCollection(false); // Hide skeleton immediately
-    }
+    try {
+      // First: Quick fetch of 12 NFTs to show immediately
+      const fastResult = await fetchNFTPage(walletAddress, 0, FAST_INITIAL_SIZE);
+      if (fastResult.nfts.length > 0) {
+        setPageNfts(fastResult.nfts);
+        setTotal(fastResult.total);
+        setLoadingCollection(false); // Hide skeleton immediately
+      }
 
-    // Then: Fetch the rest of the first page
-    if (fastResult.total > FAST_INITIAL_SIZE) {
-      const remainingResult = await fetchNFTPage(walletAddress, FAST_INITIAL_SIZE, PAGE_SIZE - FAST_INITIAL_SIZE);
-      const fullFirstPage = [...fastResult.nfts, ...remainingResult.nfts];
-      setPageNfts(fullFirstPage);
+      // Then: Fetch the rest of the first page
+      if (fastResult.total > FAST_INITIAL_SIZE) {
+        const remainingResult = await fetchNFTPage(walletAddress, FAST_INITIAL_SIZE, PAGE_SIZE - FAST_INITIAL_SIZE);
+        const fullFirstPage = [...fastResult.nfts, ...remainingResult.nfts];
+        setPageNfts(fullFirstPage);
 
-      // Start background loading for remaining pages
-      if (fastResult.total > PAGE_SIZE && !backgroundLoadingRef.current) {
-        backgroundLoadingRef.current = true;
-        backgroundLoadAllNfts(walletAddress, fastResult.total, fullFirstPage);
+        // Start background loading for remaining pages
+        if (fastResult.total > PAGE_SIZE && !backgroundLoadingRef.current) {
+          backgroundLoadingRef.current = true;
+          backgroundLoadAllNfts(walletAddress, fastResult.total, fullFirstPage);
+        } else {
+          setAllLoadedNfts(fullFirstPage);
+          const audioFromPage = fullFirstPage.filter(nft => nft.mediaType === 'audio' || nft.mediaType === 'video');
+          setAudioNfts(audioFromPage);
+        }
       } else {
-        setAllLoadedNfts(fullFirstPage);
-        const audioFromPage = fullFirstPage.filter(nft => nft.mediaType === 'audio' || nft.mediaType === 'video');
+        setAllLoadedNfts(fastResult.nfts);
+        const audioFromPage = fastResult.nfts.filter(nft => nft.mediaType === 'audio' || nft.mediaType === 'video');
         setAudioNfts(audioFromPage);
       }
-    } else {
-      setAllLoadedNfts(fastResult.nfts);
-      const audioFromPage = fastResult.nfts.filter(nft => nft.mediaType === 'audio' || nft.mediaType === 'video');
-      setAudioNfts(audioFromPage);
+    } catch (error) {
+      console.error('Failed to load NFT collection:', error);
+      setLoadingCollection(false);
+      nftCollectionLoaded.current = false; // Allow retry
+      // Show empty state instead of crashing
+      setPageNfts([]);
+      setTotal(0);
     }
   }, []);
 
@@ -227,6 +253,8 @@ export default function CreateGallery() {
   useEffect(() => {
     if (!address) return;
 
+    let cancelled = false;
+
     async function checkPayments() {
       setCheckingPayments(true);
       try {
@@ -239,21 +267,29 @@ export default function CreateGallery() {
           fetchPaymentsToTreasury(address!).catch(() => ({ paidSlots: 1 }))
         ]);
 
+        if (cancelled) return; // Don't update if cancelled
+
         if (userResult.data) {
           const { count } = await supabase
             .from('galleries')
             .select('*', { count: 'exact', head: true })
             .eq('user_id', userResult.data.id);
+
+          if (cancelled) return; // Check again after async operation
+
           setGalleryCount(count || 0);
         }
 
         setPaidSlots(paymentInfo.paidSlots);
+      } catch (error) {
+        console.error('Failed to check payments:', error);
       } finally {
-        setCheckingPayments(false);
+        if (!cancelled) setCheckingPayments(false);
       }
     }
 
     checkPayments();
+    return () => { cancelled = true; };
   }, [address]);
 
   // Pagination - show when no search/filter active
@@ -283,13 +319,13 @@ export default function CreateGallery() {
     return pages;
   }, [totalPages, currentPage]);
 
-  const handleSelectNft = (nft: NFT) => {
+  const handleSelectNft = useCallback((nft: NFT) => {
     form.toggleNftSelection(nft);
-  };
+  }, [form.toggleNftSelection]);
 
-  const handleRemoveNft = (nft: NFT) => {
+  const handleRemoveNft = useCallback((nft: NFT) => {
     form.toggleNftSelection(nft);
-  };
+  }, [form.toggleNftSelection]);
 
   const handleCreate = async () => {
     if (!address || form.selectedNfts.length === 0 || !form.name.trim()) return;
@@ -628,7 +664,7 @@ export default function CreateGallery() {
                     {form.arrangement === 'presentation' ? (
                       <div className="flex flex-col items-center justify-center py-8">
                         <img
-                          src={previewNfts[0].image}
+                          src={sanitizeImageUrl(previewNfts[0].image)}
                           alt={previewNfts[0].name}
                           className="max-h-[500px] max-w-full object-contain rounded-lg"
                         />

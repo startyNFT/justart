@@ -67,8 +67,12 @@ export default function EditGallery() {
   const currentPage = Number(searchParams.get('page')) || 1;
   const totalPages = Math.ceil(total / PAGE_SIZE);
 
-  const selectedIds = new Set(
-    form.form.selectedNfts.map((nft) => `${nft.collection.contractAddress}-${nft.tokenId}`)
+  // Memoize selectedIds to prevent unnecessary re-renders
+  const selectedIds = useMemo(
+    () => new Set(
+      form.selectedNfts.map((nft) => `${nft.collection.contractAddress}-${nft.tokenId}`)
+    ),
+    [form.selectedNfts]
   );
 
   // Background load all NFTs for search
@@ -119,21 +123,29 @@ export default function EditGallery() {
     nftCollectionLoaded.current = true;
     setLoadingCollection(true);
 
-    const nftResult = await fetchNFTPage(walletAddress, 0);
-    setPageNfts(nftResult.nfts);
-    if (nftResult.total > 0) {
-      setTotal(nftResult.total);
-    }
-    setLoadingCollection(false);
+    try {
+      const nftResult = await fetchNFTPage(walletAddress, 0);
+      setPageNfts(nftResult.nfts);
+      if (nftResult.total > 0) {
+        setTotal(nftResult.total);
+      }
+      setLoadingCollection(false);
 
-    // Start background loading for remaining pages
-    if (nftResult.total > PAGE_SIZE) {
-      backgroundLoadAllNfts(walletAddress, nftResult.total, nftResult.nfts);
-    } else {
-      setAllLoadedNfts(nftResult.nfts);
-      // Extract audio NFTs when only one page
-      const audioFromPage = nftResult.nfts.filter(nft => nft.mediaType === 'audio' || nft.mediaType === 'video');
-      setAudioNfts(audioFromPage);
+      // Start background loading for remaining pages
+      if (nftResult.total > PAGE_SIZE) {
+        backgroundLoadAllNfts(walletAddress, nftResult.total, nftResult.nfts);
+      } else {
+        setAllLoadedNfts(nftResult.nfts);
+        // Extract audio NFTs when only one page
+        const audioFromPage = nftResult.nfts.filter(nft => nft.mediaType === 'audio' || nft.mediaType === 'video');
+        setAudioNfts(audioFromPage);
+      }
+    } catch (error) {
+      console.error('Failed to load NFT collection:', error);
+      setLoadingCollection(false);
+      nftCollectionLoaded.current = false; // Allow retry
+      setPageNfts([]);
+      setTotal(0);
     }
   }, [backgroundLoadAllNfts]);
 
@@ -349,23 +361,23 @@ export default function EditGallery() {
     return pages;
   }, [totalPages, currentPage]);
 
-  const handleSelectNft = (nft: NFT) => {
+  const handleSelectNft = useCallback((nft: NFT) => {
     const key = `${nft.collection.contractAddress}-${nft.tokenId}`;
     if (selectedIds.has(key)) {
-      form.setSelectedNfts(selectedNfts.filter(
+      form.setSelectedNfts(form.selectedNfts.filter(
         (n) => `${n.collection.contractAddress}-${n.tokenId}` !== key
       ));
     } else {
-      form.setSelectedNfts([...selectedNfts, nft]);
+      form.setSelectedNfts([...form.selectedNfts, nft]);
     }
-  };
+  }, [selectedIds, form.selectedNfts, form.setSelectedNfts]);
 
-  const handleRemoveNft = (nft: NFT) => {
+  const handleRemoveNft = useCallback((nft: NFT) => {
     const key = `${nft.collection.contractAddress}-${nft.tokenId}`;
-    form.setSelectedNfts(selectedNfts.filter(
+    form.setSelectedNfts(form.selectedNfts.filter(
       (n) => `${n.collection.contractAddress}-${n.tokenId}` !== key
     ));
-  };
+  }, [form.selectedNfts, form.setSelectedNfts]);
 
   const handleSave = async () => {
     if (!gallery || !form.name.trim() || form.selectedNfts.length === 0) return;

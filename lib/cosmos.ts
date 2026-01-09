@@ -1,4 +1,9 @@
-import { STARGAZE_RPC, TREASURY_WALLET, GALLERY_PRICE_INCREMENT } from './constants';
+import {
+  STARGAZE_RPC,
+  TREASURY_WALLET,
+  GALLERY_PRICE_INCREMENT,
+  MINIMUM_PAYMENT_AMOUNT,
+} from './constants';
 
 // Memo prefix for pureart gallery payments
 export const PUREART_MEMO_PREFIX = 'pureart-gallery';
@@ -102,8 +107,8 @@ export async function fetchPaymentsToTreasury(userWallet: string): Promise<Payme
           transfer.recipient === TREASURY_WALLET
         ) {
           const amount = parseStarsAmount(transfer.amount);
-          if (amount >= GALLERY_PRICE_INCREMENT) {
-            // Only count payments that are at least 1000 STARS (gallery payment size)
+          if (amount >= MINIMUM_PAYMENT_AMOUNT) {
+            // Only count payments that meet minimum threshold
             totalPaid += amount;
             if (!txHashes.includes(tx.hash)) {
               txHashes.push(tx.hash);

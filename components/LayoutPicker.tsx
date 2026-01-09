@@ -65,7 +65,7 @@ export function SizePicker({ value, onChange, variant = 'light' }: SizePickerPro
   };
 
   return (
-    <div className={containerClass}>
+    <div className={containerClass} role="group" aria-label="Image size options">
       {SIZE_OPTIONS.map(({ id, label }) => {
         const Icon = sizeIcons[id];
         const isActive = value === id;
@@ -75,8 +75,11 @@ export function SizePicker({ value, onChange, variant = 'light' }: SizePickerPro
             onClick={() => onChange(id)}
             className={getButtonClass(isActive)}
             title={label}
+            aria-label={`Set size to ${label}`}
+            aria-pressed={isActive}
+            type="button"
           >
-            <Icon size={18} strokeWidth={1.5} />
+            <Icon size={18} strokeWidth={1.5} aria-hidden="true" />
           </button>
         );
       })}
@@ -122,7 +125,7 @@ export function ArrangementPicker({ value, onChange, variant = 'light', exclude 
   const filteredOptions = ARRANGEMENT_OPTIONS.filter(({ id }) => !exclude.includes(id));
 
   return (
-    <div className={containerClass}>
+    <div className={containerClass} role="group" aria-label="Layout arrangement options">
       {filteredOptions.map(({ id, label }) => {
         const Icon = arrangementIcons[id];
         const isActive = value === id;
@@ -132,8 +135,11 @@ export function ArrangementPicker({ value, onChange, variant = 'light', exclude 
             onClick={() => onChange(id)}
             className={getButtonClass(isActive)}
             title={label}
+            aria-label={`Set arrangement to ${label}`}
+            aria-pressed={isActive}
+            type="button"
           >
-            <Icon size={18} strokeWidth={1.5} />
+            <Icon size={18} strokeWidth={1.5} aria-hidden="true" />
           </button>
         );
       })}
@@ -158,7 +164,7 @@ type LayoutPickerProps = {
 
 export function LayoutPicker({ value, onChange }: LayoutPickerProps) {
   return (
-    <div className="flex gap-1 p-1 bg-neutral-100 rounded-lg">
+    <div className="flex gap-1 p-1 bg-neutral-100 rounded-lg" role="group" aria-label="Layout options">
       {LAYOUT_OPTIONS.map(({ id, label }) => {
         const Icon = layoutIcons[id];
         const isActive = value === id;
@@ -172,8 +178,11 @@ export function LayoutPicker({ value, onChange }: LayoutPickerProps) {
                 : 'text-neutral-400 hover:text-neutral-600'
             }`}
             title={label}
+            aria-label={`Set layout to ${label}`}
+            aria-pressed={isActive}
+            type="button"
           >
-            <Icon size={18} strokeWidth={1.5} />
+            <Icon size={18} strokeWidth={1.5} aria-hidden="true" />
           </button>
         );
       })}

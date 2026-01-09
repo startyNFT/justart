@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { CDN_MAX_RETRIES, CDN_BATCH_SIZE, RETRY_DELAY_BASE } from '@/lib/constants';
 
 type ImageSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl';
 
@@ -22,7 +23,7 @@ export function useCdnUrl(
   const [signedUrl, setSignedUrl] = useState<string>(originalUrl || '');
   const [loading, setLoading] = useState(false);
   const retryCount = useRef(0);
-  const maxRetries = 2;
+  const maxRetries = CDN_MAX_RETRIES;
 
   useEffect(() => {
     // Reset retry count when URL changes
@@ -84,7 +85,7 @@ export function useCdnUrl(
         } else if (retryCount.current < maxRetries) {
           // Retry on empty response
           retryCount.current++;
-          await new Promise(resolve => setTimeout(resolve, 500 * retryCount.current));
+          await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_BASE * retryCount.current));
           return fetchCdnUrl();
         } else {
           // Mark as failed and use original
@@ -94,7 +95,7 @@ export function useCdnUrl(
       } catch {
         if (retryCount.current < maxRetries) {
           retryCount.current++;
-          await new Promise(resolve => setTimeout(resolve, 500 * retryCount.current));
+          await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_BASE * retryCount.current));
           return fetchCdnUrl();
         }
         // Keep original URL on final error
@@ -134,9 +135,8 @@ export async function batchGetCdnUrls(
   }
 
   // Fetch uncached URLs in parallel (limit concurrency)
-  const BATCH_SIZE = 10;
-  for (let i = 0; i < uncached.length; i += BATCH_SIZE) {
-    const batch = uncached.slice(i, i + BATCH_SIZE);
+  for (let i = 0; i < uncached.length; i += CDN_BATCH_SIZE) {
+    const batch = uncached.slice(i, i + CDN_BATCH_SIZE);
     await Promise.all(
       batch.map(async (url) => {
         let ipfsUrl = url;

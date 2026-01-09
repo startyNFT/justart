@@ -1,5 +1,11 @@
 import { GraphQLClient, gql } from 'graphql-request';
-import { STARGAZE_GRAPHQL } from './constants';
+import {
+  STARGAZE_GRAPHQL,
+  PAGE_SIZE,
+  FAST_INITIAL_SIZE,
+  FETCH_RETRY_ATTEMPTS,
+  FETCH_RETRY_DELAY,
+} from './constants';
 
 const client = new GraphQLClient(STARGAZE_GRAPHQL);
 
@@ -208,9 +214,6 @@ function setCachedPage(walletAddress: string, offset: number, data: NFT[]) {
   }
 }
 
-export const PAGE_SIZE = 75; // NFTs per page
-export const FAST_INITIAL_SIZE = 12; // Quick first load for instant UI
-
 const nftQuery = `
   query TokensOwned($owner: String!, $limit: Int, $offset: Int) {
     tokens(ownerAddrOrName: $owner, limit: $limit, offset: $offset) {
@@ -238,8 +241,8 @@ const nftQuery = `
 async function fetchWithRetry(
   url: string,
   options: RequestInit,
-  maxRetries: number = 3,
-  delay: number = 1000
+  maxRetries: number = FETCH_RETRY_ATTEMPTS,
+  delay: number = FETCH_RETRY_DELAY
 ): Promise<Response> {
   let lastError: Error | null = null;
 

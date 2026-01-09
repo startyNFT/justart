@@ -13,10 +13,13 @@ import { CustomRowEditor, type RowConfig, rowConfigsToRowCounts } from '@/compon
 import { fetchNFTPage, PAGE_SIZE, FAST_INITIAL_SIZE, type NFT } from '@/lib/stargaze';
 import { supabase, GALLERY_CATEGORIES, type GalleryCategory } from '@/lib/supabase';
 import { generateSlug } from '@/lib/utils';
-import { TREASURY_WALLET } from '@/lib/constants';
+import { TREASURY_WALLET, CONCURRENT_REQUESTS, LARGE_COLLECTION_THRESHOLD } from '@/lib/constants';
 import { fetchPaymentsToTreasury, calculateEffectivePrice, PUREART_MEMO_PREFIX } from '@/lib/cosmos';
 import type { SizeType, ArrangementType, MusicTrack } from '@/lib/constants';
 import { Wallet, Loader2, ArrowRight, ArrowLeft, Layers, Gift, Lock, Unlock, Search, Filter, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { useLoadingProgress } from '@/hooks/useLoadingProgress';
+import { useNFTFilters } from '@/hooks/useNFTFilters';
+import { useGalleryForm } from '@/hooks/useGalleryForm';
 
 type Step = 'customize' | 'select' | 'arrange' | 'create';
 
@@ -33,6 +36,19 @@ function SkeletonGrid({ count = 20 }: { count?: number }) {
   );
 }
 
+// Sanitize image URLs to prevent XSS attacks
+function sanitizeImageUrl(url: string): string {
+  if (!url) return '';
+  try {
+    const parsed = new URL(url);
+    // Only allow safe protocols
+    return ['http:', 'https:', 'ipfs:', 'ar:'].includes(parsed.protocol) ? url : '';
+  } catch {
+    // Invalid URL
+    return '';
+  }
+}
+
 export default function CreateGallery() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -45,38 +61,37 @@ export default function CreateGallery() {
   const [loadingCollection, setLoadingCollection] = useState(false);
   const [total, setTotal] = useState(0);
   const [creating, setCreating] = useState(false);
-  const [hideDuplicates, setHideDuplicates] = useState(true);
   const [mounted, setMounted] = useState(false);
-
-  const [selectedNfts, setSelectedNfts] = useState<NFT[]>([]);
-  const [size, setSize] = useState<SizeType>('medium');
-  const [arrangement, setArrangement] = useState<ArrangementType>('grid');
-  const [backgroundColor, setBackgroundColor] = useState('#0A0A0A');
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [showInfo, setShowInfo] = useState(true);
-  const [lockLayout, setLockLayout] = useState(false);
-  const [category, setCategory] = useState<GalleryCategory | null>(null);
-  const [musicTrack, setMusicTrack] = useState<MusicTrack | null>(null);
-  const [nftDescriptions, setNftDescriptions] = useState<Record<string, string>>({});
   const [audioNfts, setAudioNfts] = useState<NFT[]>([]);
-  const [rowConfigs, setRowConfigs] = useState<RowConfig[] | null>(null);
+
+  // Use shared gallery form hook
+  const form = useGalleryForm({
+    initialState: {
+      backgroundColor: '#0A0A0A',
+      showInfo: true,
+      lockLayout: false,
+    },
+  });
+
+  // Use shared NFT filters hook for search and filtering
+  const filters = useNFTFilters({
+    nfts: allLoadedNfts.length > 0 ? allLoadedNfts : pageNfts,
+    hideDuplicates,
+  });
+
+  // Use shared loading progress hook
+  const initialProgress = useLoadingProgress(loading);
 
   const [galleryCount, setGalleryCount] = useState(0);
   const [paidSlots, setPaidSlots] = useState(1);
   const [checkingPayments, setCheckingPayments] = useState(false);
-
-  // Search and filter state
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCollection, setSelectedCollection] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [backgroundLoadingProgress, setBackgroundLoadingProgress] = useState('');
-  const [initialProgress, setInitialProgress] = useState(0);
+  const [hideDuplicates, setHideDuplicates] = useState(true);
 
   // Background loading ref to prevent duplicate loads
   const backgroundLoadingRef = useRef(false);
   const nftCollectionLoaded = useRef(false);
-  const initialProgressRef = useRef<NodeJS.Timeout | null>(null);
 
   // Page from URL
   const currentPage = Number(searchParams.get('page')) || 1;
@@ -85,51 +100,17 @@ export default function CreateGallery() {
   const effectivePrice = calculateEffectivePrice(galleryCount, paidSlots);
   const hasCredit = paidSlots > galleryCount;
 
-  const selectedIds = new Set(
-    selectedNfts.map((nft) => `${nft.collection.contractAddress}-${nft.tokenId}`)
+  // Memoize selectedIds to prevent unnecessary re-renders
+  const selectedIds = useMemo(
+    () => new Set(
+      form.selectedNfts.map((nft) => `${nft.collection.contractAddress}-${nft.tokenId}`)
+    ),
+    [form.selectedNfts]
   );
 
   useEffect(() => {
     setMounted(true);
   }, []);
-
-  // Animate progress: 0-75% over 5 seconds, then smooth random increments up to 99%
-  useEffect(() => {
-    if (!loading) return;
-
-    const startTime = Date.now();
-    const duration = 5000;
-    let currentProgress = 0;
-
-    const animate = () => {
-      const elapsed = Date.now() - startTime;
-
-      if (elapsed < duration) {
-        // Phase 1: 0-75% over 5 seconds (smooth)
-        currentProgress = (elapsed / duration) * 75;
-      } else if (currentProgress < 99) {
-        // Phase 2: smooth random increments toward 99%
-        const remaining = 99 - currentProgress;
-        const increment = Math.random() * Math.min(0.5, remaining * 0.1) + 0.05;
-        currentProgress = Math.min(currentProgress + increment, 99);
-      }
-
-      setInitialProgress(currentProgress);
-
-      if (currentProgress < 99 && loading) {
-        const nextInterval = 50 + Math.random() * 100;
-        initialProgressRef.current = setTimeout(animate, nextInterval);
-      }
-    };
-
-    animate();
-
-    return () => {
-      if (initialProgressRef.current) {
-        clearTimeout(initialProgressRef.current);
-      }
-    };
-  }, [loading]);
 
   // Load NFT collection with progressive loading
   const loadNftCollection = useCallback(async (walletAddress: string) => {
@@ -137,33 +118,42 @@ export default function CreateGallery() {
     nftCollectionLoaded.current = true;
     setLoadingCollection(true);
 
-    // First: Quick fetch of 12 NFTs to show immediately
-    const fastResult = await fetchNFTPage(walletAddress, 0, FAST_INITIAL_SIZE);
-    if (fastResult.nfts.length > 0) {
-      setPageNfts(fastResult.nfts);
-      setTotal(fastResult.total);
-      setLoadingCollection(false); // Hide skeleton immediately
-    }
+    try {
+      // First: Quick fetch of 12 NFTs to show immediately
+      const fastResult = await fetchNFTPage(walletAddress, 0, FAST_INITIAL_SIZE);
+      if (fastResult.nfts.length > 0) {
+        setPageNfts(fastResult.nfts);
+        setTotal(fastResult.total);
+        setLoadingCollection(false); // Hide skeleton immediately
+      }
 
-    // Then: Fetch the rest of the first page
-    if (fastResult.total > FAST_INITIAL_SIZE) {
-      const remainingResult = await fetchNFTPage(walletAddress, FAST_INITIAL_SIZE, PAGE_SIZE - FAST_INITIAL_SIZE);
-      const fullFirstPage = [...fastResult.nfts, ...remainingResult.nfts];
-      setPageNfts(fullFirstPage);
+      // Then: Fetch the rest of the first page
+      if (fastResult.total > FAST_INITIAL_SIZE) {
+        const remainingResult = await fetchNFTPage(walletAddress, FAST_INITIAL_SIZE, PAGE_SIZE - FAST_INITIAL_SIZE);
+        const fullFirstPage = [...fastResult.nfts, ...remainingResult.nfts];
+        setPageNfts(fullFirstPage);
 
-      // Start background loading for remaining pages
-      if (fastResult.total > PAGE_SIZE && !backgroundLoadingRef.current) {
-        backgroundLoadingRef.current = true;
-        backgroundLoadAllNfts(walletAddress, fastResult.total, fullFirstPage);
+        // Start background loading for remaining pages
+        if (fastResult.total > PAGE_SIZE && !backgroundLoadingRef.current) {
+          backgroundLoadingRef.current = true;
+          backgroundLoadAllNfts(walletAddress, fastResult.total, fullFirstPage);
+        } else {
+          setAllLoadedNfts(fullFirstPage);
+          const audioFromPage = fullFirstPage.filter(nft => nft.mediaType === 'audio' || nft.mediaType === 'video');
+          setAudioNfts(audioFromPage);
+        }
       } else {
-        setAllLoadedNfts(fullFirstPage);
-        const audioFromPage = fullFirstPage.filter(nft => nft.mediaType === 'audio' || nft.mediaType === 'video');
+        setAllLoadedNfts(fastResult.nfts);
+        const audioFromPage = fastResult.nfts.filter(nft => nft.mediaType === 'audio' || nft.mediaType === 'video');
         setAudioNfts(audioFromPage);
       }
-    } else {
-      setAllLoadedNfts(fastResult.nfts);
-      const audioFromPage = fastResult.nfts.filter(nft => nft.mediaType === 'audio' || nft.mediaType === 'video');
-      setAudioNfts(audioFromPage);
+    } catch (error) {
+      console.error('Failed to load NFT collection:', error);
+      setLoadingCollection(false);
+      nftCollectionLoaded.current = false; // Allow retry
+      // Show empty state instead of crashing
+      setPageNfts([]);
+      setTotal(0);
     }
   }, []);
 
@@ -228,7 +218,6 @@ export default function CreateGallery() {
     setAudioNfts(firstPageAudio);
 
     const pagesToLoad = Math.ceil(totalCount / PAGE_SIZE);
-    const CONCURRENT_REQUESTS = 6;
     let loadedNfts = [...firstPageNfts];
     let loadedAudioNfts = [...firstPageAudio];
 
@@ -264,6 +253,8 @@ export default function CreateGallery() {
   useEffect(() => {
     if (!address) return;
 
+    let cancelled = false;
+
     async function checkPayments() {
       setCheckingPayments(true);
       try {
@@ -276,83 +267,33 @@ export default function CreateGallery() {
           fetchPaymentsToTreasury(address!).catch(() => ({ paidSlots: 1 }))
         ]);
 
+        if (cancelled) return; // Don't update if cancelled
+
         if (userResult.data) {
           const { count } = await supabase
             .from('galleries')
             .select('*', { count: 'exact', head: true })
             .eq('user_id', userResult.data.id);
+
+          if (cancelled) return; // Check again after async operation
+
           setGalleryCount(count || 0);
         }
 
         setPaidSlots(paymentInfo.paidSlots);
+      } catch (error) {
+        console.error('Failed to check payments:', error);
       } finally {
-        setCheckingPayments(false);
+        if (!cancelled) setCheckingPayments(false);
       }
     }
 
     checkPayments();
+    return () => { cancelled = true; };
   }, [address]);
 
-  // Get unique collections from all loaded NFTs
-  const collections = useMemo(() => {
-    const source = allLoadedNfts.length > 0 ? allLoadedNfts : pageNfts;
-    const collectionMap = new Map<string, { address: string; name: string; count: number }>();
-    source.forEach((nft) => {
-      const addr = nft.collection.contractAddress;
-      if (collectionMap.has(addr)) {
-        collectionMap.get(addr)!.count++;
-      } else {
-        collectionMap.set(addr, {
-          address: addr,
-          name: nft.collection.name,
-          count: 1,
-        });
-      }
-    });
-    return Array.from(collectionMap.values()).sort((a, b) => b.count - a.count);
-  }, [allLoadedNfts, pageNfts]);
-
-  // Deduplicate open editions
-  const deduplicateNfts = useCallback((nfts: NFT[]) => {
-    if (!hideDuplicates) return nfts;
-    const seen = new Map<string, NFT>();
-    for (const nft of nfts) {
-      const key = `${nft.collection.contractAddress}-${nft.image}`;
-      if (!seen.has(key)) seen.set(key, nft);
-    }
-    return Array.from(seen.values());
-  }, [hideDuplicates]);
-
-  // Filter and deduplicate display NFTs
-  const displayNfts = useMemo(() => {
-    // If searching, search all loaded NFTs
-    const source = (searchQuery.trim() || selectedCollection) && allLoadedNfts.length > 0
-      ? allLoadedNfts
-      : pageNfts;
-
-    let result = source;
-
-    // Filter by collection
-    if (selectedCollection) {
-      result = result.filter((nft) => nft.collection.contractAddress === selectedCollection);
-    }
-
-    // Filter by search query
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      result = result.filter(
-        (nft) =>
-          nft.name.toLowerCase().includes(query) ||
-          nft.tokenId.toLowerCase().includes(query) ||
-          nft.collection.name.toLowerCase().includes(query)
-      );
-    }
-
-    return deduplicateNfts(result);
-  }, [pageNfts, allLoadedNfts, searchQuery, selectedCollection, deduplicateNfts]);
-
   // Pagination - show when no search/filter active
-  const showPagination = !searchQuery.trim() && !selectedCollection && totalPages > 1;
+  const showPagination = !filters.searchQuery.trim() && !filters.selectedCollection && totalPages > 1;
 
   const goToPage = useCallback((page: number) => {
     if (page >= 1 && page <= totalPages) {
@@ -378,22 +319,16 @@ export default function CreateGallery() {
     return pages;
   }, [totalPages, currentPage]);
 
-  const handleSelectNft = (nft: NFT) => {
-    const key = `${nft.collection.contractAddress}-${nft.tokenId}`;
-    if (selectedIds.has(key)) {
-      setSelectedNfts(selectedNfts.filter((n) => `${n.collection.contractAddress}-${n.tokenId}` !== key));
-    } else {
-      setSelectedNfts([...selectedNfts, nft]);
-    }
-  };
+  const handleSelectNft = useCallback((nft: NFT) => {
+    form.toggleNftSelection(nft);
+  }, [form.toggleNftSelection]);
 
-  const handleRemoveNft = (nft: NFT) => {
-    const key = `${nft.collection.contractAddress}-${nft.tokenId}`;
-    setSelectedNfts(selectedNfts.filter((n) => `${n.collection.contractAddress}-${n.tokenId}` !== key));
-  };
+  const handleRemoveNft = useCallback((nft: NFT) => {
+    form.toggleNftSelection(nft);
+  }, [form.toggleNftSelection]);
 
   const handleCreate = async () => {
-    if (!address || selectedNfts.length === 0 || !name.trim()) return;
+    if (!address || form.selectedNfts.length === 0 || !form.name.trim()) return;
 
     setCreating(true);
 
@@ -434,9 +369,9 @@ export default function CreateGallery() {
         userId = newUser.id;
       }
 
-      const nftIds = selectedNfts.map((nft) => {
+      const nftIds = form.selectedNfts.map((nft) => {
         const key = `${nft.collection.contractAddress}-${nft.tokenId}`;
-        const desc = nftDescriptions[key];
+        const desc = form.nftDescriptions[key];
         return {
           contract: nft.collection.contractAddress,
           token_id: nft.tokenId,
@@ -447,7 +382,7 @@ export default function CreateGallery() {
       // Cache first 4 image URLs for instant gallery preview (skip audio NFTs)
       // Use full image URL (not thumbnail) for high-res display on homepage
       const cachedThumbnails: string[] = [];
-      for (const nft of selectedNfts) {
+      for (const nft of form.selectedNfts) {
         if (nft.mediaType === 'audio') continue;
         const url = nft.image || nft.thumbnail; // Prefer full image
         if (url) {
@@ -457,28 +392,28 @@ export default function CreateGallery() {
       }
 
       const slug = generateSlug();
-      const layout = `${size}-${arrangement}`;
+      const layout = `${form.size}-${form.arrangement}`;
 
       // Base insert data (columns that always exist)
       const baseData: Record<string, unknown> = {
         user_id: userId,
         slug,
-        name: name.trim(),
-        description: description.trim() || null,
-        background_color: backgroundColor,
+        name: form.name.trim(),
+        description: form.description.trim() || null,
+        background_color: form.backgroundColor,
         layout,
         nft_ids: nftIds,
         payment_tx_hash: txHash,
-        show_info: showInfo,
+        show_info: form.showInfo,
         cached_thumbnails: cachedThumbnails.length > 0 ? cachedThumbnails : null,
-        ...(musicTrack ? { music_track: JSON.stringify(musicTrack) } : {}),
-        ...(rowConfigs ? { custom_row_counts: rowConfigsToRowCounts(rowConfigs) } : {}),
+        ...(form.musicTrack ? { music_track: JSON.stringify(form.musicTrack) } : {}),
+        ...(form.rowConfigs ? { custom_row_counts: rowConfigsToRowCounts(form.rowConfigs) } : {}),
       };
 
       // Optional columns that may not exist in the database
       const optionalColumns: Record<string, unknown> = {
-        lock_layout: lockLayout,
-        category,
+        lock_layout: form.lockLayout,
+        category: form.category,
       };
 
       // Try with all columns first
@@ -522,8 +457,8 @@ export default function CreateGallery() {
     );
   }
 
-  const selectedCollectionName = selectedCollection
-    ? collections.find((c) => c.address === selectedCollection)?.name
+  const selectedCollectionName = filters.selectedCollection
+    ? filters.collections.find((c) => c.addr === filters.selectedCollection)?.name
     : null;
 
   return (
@@ -536,16 +471,16 @@ export default function CreateGallery() {
               key={s}
               onClick={() => {
                 // Only allow navigating to create if NFTs are selected
-                if (s === 'create' && selectedNfts.length === 0) return;
+                if (s === 'create' && form.selectedNfts.length === 0) return;
                 // Only allow select/arrange/create if coming from a valid state
-                if ((s === 'arrange' || s === 'create') && selectedNfts.length === 0) return;
+                if ((s === 'arrange' || s === 'create') && form.selectedNfts.length === 0) return;
                 setStep(s);
               }}
-              disabled={(s === 'arrange' || s === 'create') && selectedNfts.length === 0}
+              disabled={(s === 'arrange' || s === 'create') && form.selectedNfts.length === 0}
               className={`px-3 md:px-4 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${
                 step === s
                   ? 'bg-white text-neutral-900 shadow-sm'
-                  : (s === 'arrange' || s === 'create') && selectedNfts.length === 0
+                  : (s === 'arrange' || s === 'create') && form.selectedNfts.length === 0
                   ? 'text-neutral-300 cursor-not-allowed'
                   : 'text-neutral-500 hover:text-neutral-700'
               }`}
@@ -566,8 +501,8 @@ export default function CreateGallery() {
               </label>
               <input
                 type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
+                value={form.name}
+                onChange={(e) => form.setName(e.target.value)}
                 placeholder="My Collection"
                 className="w-full px-3 py-2 border border-neutral-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-neutral-200"
               />
@@ -578,8 +513,8 @@ export default function CreateGallery() {
                 Description (optional)
               </label>
               <textarea
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
+                value={form.description}
+                onChange={(e) => form.setDescription(e.target.value)}
                 placeholder="A collection of my favorite pieces..."
                 rows={3}
                 className="w-full px-3 py-2 border border-neutral-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-neutral-200 resize-none"
@@ -588,17 +523,17 @@ export default function CreateGallery() {
 
             <div>
               <label className="block text-sm font-medium text-neutral-700 mb-2">Size</label>
-              <SizePicker value={size} onChange={setSize} />
+              <SizePicker value={form.size} onChange={form.setSize} />
             </div>
 
             <div>
               <label className="block text-sm font-medium text-neutral-700 mb-2">Arrangement</label>
-              <ArrangementPicker value={arrangement} onChange={setArrangement} />
+              <ArrangementPicker value={form.arrangement} onChange={form.setArrangement} />
             </div>
 
             <div>
               <label className="block text-sm font-medium text-neutral-700 mb-2">Background Color</label>
-              <ColorPicker value={backgroundColor} onChange={setBackgroundColor} />
+              <ColorPicker value={form.backgroundColor} onChange={form.setBackgroundColor} />
             </div>
 
             <div>
@@ -607,9 +542,9 @@ export default function CreateGallery() {
               </label>
               <div className="flex items-center gap-3">
                 <button
-                  onClick={() => setShowInfo(true)}
+                  onClick={() => form.setShowInfo(true)}
                   className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    showInfo
+                    form.showInfo
                       ? 'bg-neutral-900 text-white'
                       : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
                   }`}
@@ -617,9 +552,9 @@ export default function CreateGallery() {
                   Always Show
                 </button>
                 <button
-                  onClick={() => setShowInfo(false)}
+                  onClick={() => form.setShowInfo(false)}
                   className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    !showInfo
+                    !form.showInfo
                       ? 'bg-neutral-900 text-white'
                       : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
                   }`}
@@ -636,9 +571,9 @@ export default function CreateGallery() {
               <label className="block text-sm font-medium text-neutral-700 mb-2">Layout Lock</label>
               <div className="flex items-center gap-3">
                 <button
-                  onClick={() => setLockLayout(false)}
+                  onClick={() => form.setLockLayout(false)}
                   className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    !lockLayout
+                    !form.lockLayout
                       ? 'bg-neutral-900 text-white'
                       : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
                   }`}
@@ -647,9 +582,9 @@ export default function CreateGallery() {
                   Unlocked
                 </button>
                 <button
-                  onClick={() => setLockLayout(true)}
+                  onClick={() => form.setLockLayout(true)}
                   className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    lockLayout
+                    form.lockLayout
                       ? 'bg-neutral-900 text-white'
                       : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
                   }`}
@@ -665,7 +600,7 @@ export default function CreateGallery() {
 
             <div>
               <label className="block text-sm font-medium text-neutral-700 mb-2">Background Music</label>
-              <MusicPicker value={musicTrack} onChange={setMusicTrack} audioNfts={audioNfts} loading={loadingCollection} />
+              <MusicPicker value={form.musicTrack} onChange={form.setMusicTrack} audioNfts={audioNfts} loading={loadingCollection} />
               <p className="text-xs text-neutral-400 mt-2">
                 Optional ambient music that plays when visitors view your gallery
               </p>
@@ -677,9 +612,9 @@ export default function CreateGallery() {
                 {GALLERY_CATEGORIES.map((cat) => (
                   <button
                     key={cat.value}
-                    onClick={() => setCategory(category === cat.value ? null : cat.value)}
+                    onClick={() => form.setCategory(form.category === cat.value ? null : cat.value)}
                     className={`px-3 py-1.5 rounded-full text-sm transition-colors ${
-                      category === cat.value
+                      form.category === cat.value
                         ? 'bg-neutral-900 text-white'
                         : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
                     }`}
@@ -709,12 +644,12 @@ export default function CreateGallery() {
             <p className="text-sm text-neutral-500 mb-3">Preview</p>
             <div
               className="p-4 rounded-lg overflow-hidden"
-              style={{ backgroundColor }}
+              style={{ backgroundColor: form.backgroundColor }}
             >
               {(() => {
                 // Use selected NFTs if any, otherwise show sample from user's collection
-                const previewNfts = selectedNfts.length > 0 ? selectedNfts : (allLoadedNfts.length > 0 ? allLoadedNfts : pageNfts);
-                const isSample = selectedNfts.length === 0;
+                const previewNfts = form.selectedNfts.length > 0 ? form.selectedNfts : (allLoadedNfts.length > 0 ? allLoadedNfts : pageNfts);
+                const isSample = form.selectedNfts.length === 0;
 
                 if (previewNfts.length === 0) {
                   return (
@@ -726,22 +661,22 @@ export default function CreateGallery() {
 
                 return (
                   <>
-                    {arrangement === 'presentation' ? (
+                    {form.arrangement === 'presentation' ? (
                       <div className="flex flex-col items-center justify-center py-8">
                         <img
-                          src={previewNfts[0].image}
+                          src={sanitizeImageUrl(previewNfts[0].image)}
                           alt={previewNfts[0].name}
                           className="max-h-[500px] max-w-full object-contain rounded-lg"
                         />
                         <p className="mt-4 text-sm text-neutral-500">(Fullscreen slideshow mode)</p>
                       </div>
-                    ) : arrangement === 'justified' ? (
+                    ) : form.arrangement === 'justified' ? (
                       // Custom justified preview - 3 rows with increasing items
                       <div className="flex flex-col gap-1">
                         {(() => {
-                          const firstRowCount = size === 'large' ? 2 : size === 'medium' ? 4 : 5;
-                          const secondRowCount = size === 'large' ? 3 : size === 'medium' ? 5 : 6;
-                          const thirdRowCount = size === 'large' ? 4 : size === 'medium' ? 6 : 7;
+                          const firstRowCount = form.size === 'large' ? 2 : form.size === 'medium' ? 4 : 5;
+                          const secondRowCount = form.size === 'large' ? 3 : form.size === 'medium' ? 5 : 6;
+                          const thirdRowCount = form.size === 'large' ? 4 : form.size === 'medium' ? 6 : 7;
                           const rows = [
                             previewNfts.slice(0, firstRowCount),
                             previewNfts.slice(firstRowCount, firstRowCount + secondRowCount),
@@ -772,18 +707,18 @@ export default function CreateGallery() {
                       <NFTGrid
                         nfts={previewNfts.slice(0, (() => {
                           // Vertical: 3 rows based on column count
-                          if (arrangement === 'vertical') {
-                            if (size === 'large') return 6;   // 2 cols × 3 rows
-                            if (size === 'medium') return 9;  // 3 cols × 3 rows
+                          if (form.arrangement === 'vertical') {
+                            if (form.size === 'large') return 6;   // 2 cols × 3 rows
+                            if (form.size === 'medium') return 9;  // 3 cols × 3 rows
                             return 15;                         // 5 cols × 3 rows
                           }
                           // Grid: ensure 3 full rows based on size
-                          if (size === 'large') return 9;   // 3 cols × 3 rows
-                          if (size === 'medium') return 15; // 5 cols × 3 rows
+                          if (form.size === 'large') return 9;   // 3 cols × 3 rows
+                          if (form.size === 'medium') return 15; // 5 cols × 3 rows
                           return 24;                         // 8 cols × 3 rows
                         })())}
-                        size={size}
-                        arrangement={arrangement}
+                        size={form.size}
+                        arrangement={form.arrangement}
                       />
                     )}
                     {isSample && (
@@ -816,7 +751,7 @@ export default function CreateGallery() {
             <div className="flex items-center gap-3">
               <p className="text-sm text-neutral-400">
                 {loadingCollection ? 'Loading NFTs...' : total > 0 ? `${total} NFTs` : 'No NFTs found'}
-                {selectedNfts.length > 0 && ` • ${selectedNfts.length} selected`}
+                {form.selectedNfts.length > 0 && ` • ${form.selectedNfts.length} selected`}
               </p>
               {(loading || loadingCollection) && <Loader2 size={14} className="text-neutral-400 animate-spin" />}
             </div>
@@ -840,14 +775,14 @@ export default function CreateGallery() {
               <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
               <input
                 type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                value={filters.searchQuery}
+                onChange={(e) => filters.setSearchQuery(e.target.value)}
                 placeholder="Search by name or token ID..."
                 className="w-full pl-10 pr-4 py-2 border border-neutral-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-neutral-200"
               />
-              {searchQuery && (
+              {filters.searchQuery && (
                 <button
-                  onClick={() => setSearchQuery('')}
+                  onClick={() => filters.setSearchQuery('')}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600"
                 >
                   <X size={16} />
@@ -857,14 +792,14 @@ export default function CreateGallery() {
             <button
               onClick={() => setShowFilters(!showFilters)}
               className={`flex items-center gap-2 px-4 py-2 border rounded-lg transition-colors ${
-                showFilters || selectedCollection
+                showFilters || filters.selectedCollection
                   ? 'border-neutral-900 bg-neutral-900 text-white'
                   : 'border-neutral-200 text-neutral-600 hover:border-neutral-300'
               }`}
             >
               <Filter size={18} />
               Collections
-              {selectedCollection && (
+              {filters.selectedCollection && (
                 <span className="bg-white text-neutral-900 text-xs px-2 py-0.5 rounded-full">1</span>
               )}
             </button>
@@ -875,9 +810,9 @@ export default function CreateGallery() {
             <div className="mb-6 p-4 bg-neutral-50 rounded-lg">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-sm font-medium text-neutral-700">Filter by Collection</span>
-                {selectedCollection && (
+                {filters.selectedCollection && (
                   <button
-                    onClick={() => setSelectedCollection(null)}
+                    onClick={() => filters.setSelectedCollection(null)}
                     className="text-sm text-neutral-500 hover:text-neutral-700"
                   >
                     Clear filter
@@ -885,14 +820,14 @@ export default function CreateGallery() {
                 )}
               </div>
               <div className="flex flex-wrap gap-2">
-                {collections.map((collection) => (
+                {filters.collections.map((collection) => (
                   <button
-                    key={collection.address}
-                    onClick={() => setSelectedCollection(
-                      selectedCollection === collection.address ? null : collection.address
+                    key={collection.addr}
+                    onClick={() => filters.setSelectedCollection(
+                      filters.selectedCollection === collection.addr ? null : collection.addr
                     )}
                     className={`px-3 py-1.5 text-sm rounded-full transition-colors ${
-                      selectedCollection === collection.address
+                      filters.selectedCollection === collection.addr
                         ? 'bg-neutral-900 text-white'
                         : 'bg-white border border-neutral-200 text-neutral-600 hover:border-neutral-300'
                     }`}
@@ -912,7 +847,7 @@ export default function CreateGallery() {
               <span className="inline-flex items-center gap-1 px-3 py-1 bg-neutral-100 rounded-full text-sm">
                 {selectedCollectionName}
                 <button
-                  onClick={() => setSelectedCollection(null)}
+                  onClick={() => filters.setSelectedCollection(null)}
                   className="ml-1 text-neutral-400 hover:text-neutral-600"
                 >
                   <X size={14} />
@@ -924,8 +859,8 @@ export default function CreateGallery() {
           {/* Results count */}
           <div className="flex items-center justify-between mb-4">
             <p className="text-neutral-500 text-sm">
-              {displayNfts.length} NFTs
-              {(searchQuery || selectedCollection) && ` found`}
+              {filters.displayNfts.length} NFTs
+              {(filters.searchQuery || filters.selectedCollection) && ` found`}
             </p>
             <p className="text-neutral-500 text-sm">{selectedIds.size} selected</p>
           </div>
@@ -933,9 +868,9 @@ export default function CreateGallery() {
           {/* NFT Grid */}
           {(loading || loadingCollection) && pageNfts.length === 0 ? (
             <SkeletonGrid count={20} />
-          ) : displayNfts.length > 0 ? (
+          ) : filters.displayNfts.length > 0 ? (
             <NFTGrid
-              nfts={displayNfts}
+              nfts={filters.displayNfts}
               size="medium"
               arrangement="grid"
               selectable
@@ -993,34 +928,34 @@ export default function CreateGallery() {
       {step === 'arrange' && (
         <>
           <p className="text-neutral-500 text-sm mb-6">
-            Drag to reorder{arrangement === 'justified' && ', adjust row sizes'}.
-            {arrangement === 'presentation' && ' Add descriptions for presentation mode.'}
+            Drag to reorder{form.arrangement === 'justified' && ', adjust row sizes'}.
+            {form.arrangement === 'presentation' && ' Add descriptions for presentation mode.'}
           </p>
 
           {/* Custom row editor for justified layout - replaces SortableNFTGrid */}
-          {arrangement === 'justified' ? (
+          {form.arrangement === 'justified' ? (
             <div className="space-y-6">
               <div className="p-4 bg-neutral-50 rounded-xl">
                 <CustomRowEditor
-                  nfts={selectedNfts}
-                  rowConfigs={rowConfigs}
-                  onChange={setRowConfigs}
-                  onReorder={setSelectedNfts}
+                  nfts={form.selectedNfts}
+                  rowConfigs={form.rowConfigs}
+                  onChange={form.setRowConfigs}
+                  onReorder={form.setSelectedNfts}
                   onRemove={handleRemoveNft}
-                  size={size}
+                  size={form.size}
                 />
               </div>
 
               {/* Preview */}
-              {selectedNfts.length > 0 && (
+              {form.selectedNfts.length > 0 && (
                 <div>
                   <p className="text-sm text-neutral-500 mb-3">Preview</p>
-                  <div className="p-4 rounded-xl" style={{ backgroundColor }}>
+                  <div className="p-4 rounded-xl" style={{ backgroundColor: form.backgroundColor }}>
                     <NFTGrid
-                      nfts={selectedNfts}
-                      size={size}
+                      nfts={form.selectedNfts}
+                      size={form.size}
                       arrangement="justified"
-                      customRowCounts={rowConfigsToRowCounts(rowConfigs)}
+                      customRowCounts={rowConfigsToRowCounts(form.rowConfigs)}
                       rowHeights={undefined}
                     />
                   </div>
@@ -1029,20 +964,20 @@ export default function CreateGallery() {
             </div>
           ) : (
             <SortableNFTGrid
-              nfts={selectedNfts}
-              onReorder={setSelectedNfts}
+              nfts={form.selectedNfts}
+              onReorder={form.setSelectedNfts}
               onRemove={handleRemoveNft}
             />
           )}
 
-          {arrangement === 'presentation' && selectedNfts.length > 0 && (
+          {form.arrangement === 'presentation' && form.selectedNfts.length > 0 && (
             <div className="mt-8 border-t pt-8">
               <h3 className="text-lg font-medium mb-4">NFT Descriptions</h3>
               <p className="text-sm text-neutral-500 mb-6">
                 Add personal descriptions or stories for each NFT. These will appear during the presentation.
               </p>
               <div className="space-y-4">
-                {selectedNfts.map((nft, index) => {
+                {form.selectedNfts.map((nft, index) => {
                   const key = `${nft.collection.contractAddress}-${nft.tokenId}`;
                   return (
                     <div key={key} className="flex gap-4 items-start p-4 bg-neutral-50 rounded-lg">
@@ -1057,11 +992,8 @@ export default function CreateGallery() {
                       <div className="flex-1">
                         <p className="text-sm font-medium mb-2">{nft.collection.name}</p>
                         <textarea
-                          value={nftDescriptions[key] || ''}
-                          onChange={(e) => setNftDescriptions(prev => ({
-                            ...prev,
-                            [key]: e.target.value
-                          }))}
+                          value={form.nftDescriptions[key] || ''}
+                          onChange={(e) => form.updateNftDescription(key, e.target.value)}
                           placeholder="Add a description, story, or context for this NFT..."
                           rows={2}
                           className="w-full px-3 py-2 text-sm border border-neutral-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-neutral-200 resize-none"
@@ -1079,18 +1011,18 @@ export default function CreateGallery() {
       {step === 'create' && (
         <div className="max-w-4xl mx-auto">
           {/* Preview - first 2 rows */}
-          <div className="p-6 rounded-xl mb-8" style={{ backgroundColor }}>
+          <div className="p-6 rounded-xl mb-8" style={{ backgroundColor: form.backgroundColor }}>
             <p className="text-sm text-neutral-500 mb-4">Preview</p>
             <NFTGrid
-              nfts={selectedNfts.slice(0, size === 'small' ? 12 : size === 'medium' ? 8 : 4)}
-              size={size}
-              arrangement={arrangement}
-              customRowCounts={arrangement === 'justified' ? rowConfigsToRowCounts(rowConfigs) : undefined}
+              nfts={form.selectedNfts.slice(0, form.size === 'small' ? 12 : form.size === 'medium' ? 8 : 4)}
+              size={form.size}
+              arrangement={form.arrangement}
+              customRowCounts={form.arrangement === 'justified' ? rowConfigsToRowCounts(form.rowConfigs) : undefined}
               rowHeights={undefined}
             />
-            {selectedNfts.length > (size === 'small' ? 12 : size === 'medium' ? 8 : 4) && (
+            {form.selectedNfts.length > (form.size === 'small' ? 12 : form.size === 'medium' ? 8 : 4) && (
               <p className="text-center text-neutral-400 text-sm mt-4">
-                + {selectedNfts.length - (size === 'small' ? 12 : size === 'medium' ? 8 : 4)} more NFTs
+                + {form.selectedNfts.length - (form.size === 'small' ? 12 : form.size === 'medium' ? 8 : 4)} more NFTs
               </p>
             )}
           </div>
@@ -1100,24 +1032,24 @@ export default function CreateGallery() {
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
                 <span className="text-neutral-500">Name</span>
-                <p className="font-medium">{name || 'Untitled'}</p>
+                <p className="font-medium">{form.name || 'Untitled'}</p>
               </div>
               <div>
                 <span className="text-neutral-500">NFTs</span>
-                <p className="font-medium">{selectedNfts.length}</p>
+                <p className="font-medium">{form.selectedNfts.length}</p>
               </div>
               <div>
                 <span className="text-neutral-500">Layout</span>
-                <p className="font-medium capitalize">{size} / {arrangement}</p>
+                <p className="font-medium capitalize">{form.size} / {form.arrangement}</p>
               </div>
               <div>
                 <span className="text-neutral-500">Background</span>
                 <div className="flex items-center gap-2">
                   <div
                     className="w-4 h-4 rounded border border-neutral-200"
-                    style={{ backgroundColor }}
+                    style={{ backgroundColor: form.backgroundColor }}
                   />
-                  <span className="font-medium">{backgroundColor}</span>
+                  <span className="font-medium">{form.backgroundColor}</span>
                 </div>
               </div>
             </div>
@@ -1155,7 +1087,7 @@ export default function CreateGallery() {
             </div>
             <button
               onClick={handleCreate}
-              disabled={!name.trim() || creating || checkingPayments || selectedNfts.length === 0}
+              disabled={!form.name.trim() || creating || checkingPayments || form.selectedNfts.length === 0}
               className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-neutral-900 text-white rounded-lg hover:bg-neutral-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {creating ? (
@@ -1179,7 +1111,7 @@ export default function CreateGallery() {
                 </>
               )}
             </button>
-            {!name.trim() && (
+            {!form.name.trim() && (
               <p className="text-center text-amber-600 text-sm mt-2">
                 Please add a gallery name in the Customize tab
               </p>

@@ -7,6 +7,7 @@ import { NFTGrid } from '@/components/NFTGrid';
 import { ConnectWalletButton } from '@/components/ConnectWalletButton';
 import { SizePicker, ArrangementPicker } from '@/components/LayoutPicker';
 import { fetchNFTPage, PAGE_SIZE, FAST_INITIAL_SIZE, type NFT } from '@/lib/stargaze';
+import { PREFETCH_PAGES_AHEAD, LARGE_COLLECTION_THRESHOLD, CONCURRENT_REQUESTS } from '@/lib/constants';
 import type { SizeType, ArrangementType } from '@/lib/constants';
 import { Wallet, Loader2, ChevronLeft, ChevronRight, Layers, Search, X } from 'lucide-react';
 
@@ -49,7 +50,6 @@ export default function MyNFTs() {
   // Background loading state
   const [loadingProgress, setLoadingProgress] = useState({ loaded: 0, total: 0 });
   const [initialProgress, setInitialProgress] = useState(0);
-  const backgroundLoadingRef = useRef(false);
   const initialProgressRef = useRef<NodeJS.Timeout | null>(null);
 
   // Get page from URL, default to 1
@@ -101,37 +101,50 @@ export default function MyNFTs() {
     };
   }, [loading]);
 
-  // Background load all pages for faster navigation
-  const backgroundLoadAllPages = useCallback(async (walletAddress: string, totalCount: number) => {
-    if (backgroundLoadingRef.current) return;
-    backgroundLoadingRef.current = true;
-
-    const pagesToLoad = Math.ceil(totalCount / PAGE_SIZE);
-    const CONCURRENT_REQUESTS = 6;
-
-    // Generate all page offsets (skip first page, already loaded)
-    const offsets: number[] = [];
-    for (let page = 2; page <= pagesToLoad; page++) {
-      offsets.push((page - 1) * PAGE_SIZE);
+  // Smart prefetch: Load next 5 pages ahead for seamless navigation
+  const prefetchPages = useCallback(async (walletAddress: string, totalCount: number, fromPage: number) => {
+    // Skip prefetching for small collections (< 300 NFTs)
+    if (totalCount <= LARGE_COLLECTION_THRESHOLD) {
+      return;
     }
 
-    let loadedCount = PAGE_SIZE; // First page already loaded
+    const totalPages = Math.ceil(totalCount / PAGE_SIZE);
+
+    // Determine which pages to prefetch (next 5 pages from current)
+    const pagesToPrefetch: number[] = [];
+    for (let page = fromPage + 1; page <= Math.min(fromPage + PREFETCH_PAGES_AHEAD, totalPages); page++) {
+      // Check if page is already cached
+      const offset = (page - 1) * PAGE_SIZE;
+      const cachedKey = `pureart_nfts_page_${walletAddress}_${offset}`;
+      try {
+        const cached = sessionStorage.getItem(cachedKey);
+        if (!cached) {
+          pagesToPrefetch.push(page);
+        }
+      } catch {
+        // Storage not available, prefetch anyway
+        pagesToPrefetch.push(page);
+      }
+    }
+
+    if (pagesToPrefetch.length === 0) return;
 
     // Fetch in parallel batches
+    const offsets = pagesToPrefetch.map(page => (page - 1) * PAGE_SIZE);
     for (let i = 0; i < offsets.length; i += CONCURRENT_REQUESTS) {
       const batch = offsets.slice(i, i + CONCURRENT_REQUESTS);
-      setLoadingProgress({ loaded: loadedCount, total: totalCount });
+
+      // Show subtle progress indicator
+      const prefetchStart = fromPage * PAGE_SIZE;
+      const prefetchEnd = Math.min((fromPage + PREFETCH_PAGES_AHEAD) * PAGE_SIZE, totalCount);
+      setLoadingProgress({ loaded: prefetchStart, total: prefetchEnd });
 
       await Promise.all(
         batch.map(offset => fetchNFTPage(walletAddress, offset, PAGE_SIZE))
       );
-
-      loadedCount += batch.length * PAGE_SIZE;
     }
 
-    setLoadingProgress({ loaded: totalCount, total: totalCount });
-    // Brief delay to show 100% before hiding
-    await new Promise(resolve => setTimeout(resolve, 300));
+    // Clear progress indicator
     setLoadingProgress({ loaded: 0, total: 0 });
   }, []);
 
@@ -183,10 +196,8 @@ export default function MyNFTs() {
           setNfts(prev => [...prev.slice(0, FAST_INITIAL_SIZE), ...remainingResult.nfts]);
         }
 
-        // Start background loading for other pages
-        if (fastResult.total > PAGE_SIZE && !backgroundLoadingRef.current) {
-          backgroundLoadAllPages(address!, fastResult.total);
-        }
+        // Start smart prefetching for next 5 pages (for large collections only)
+        prefetchPages(address!, fastResult.total, 1);
         return;
       }
 
@@ -215,7 +226,15 @@ export default function MyNFTs() {
     }
 
     loadPage();
-  }, [address, currentPage, backgroundLoadAllPages]);
+  }, [address, currentPage, prefetchPages]);
+
+  // Trigger prefetching when navigating between pages
+  useEffect(() => {
+    if (!address || !total || loading) return;
+
+    // Prefetch next 5 pages from current position
+    prefetchPages(address, total, currentPage);
+  }, [address, currentPage, total, loading, prefetchPages]);
 
   const goToPage = useCallback((page: number) => {
     if (page >= 1 && page <= totalPages) {

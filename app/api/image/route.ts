@@ -1,14 +1,15 @@
 import { createCdnUrl, isCdnConfigured, type ImageSize } from '@/lib/image-cdn';
 import { NextRequest, NextResponse } from 'next/server';
 import { lenientRateLimiter, getClientIdentifier, createRateLimitHeaders } from '@/lib/rate-limit';
+import { RATE_LIMIT_IMAGE_ENDPOINT } from '@/lib/constants';
 
 // API route to get signed image URL
 // Keys never leave the server - client calls this endpoint to get signed URLs
-// Rate limited to 100 requests per minute per client
+// Rate limited to 1000 requests per minute for seamless background NFT loading
 export async function GET(request: NextRequest) {
-  // Apply rate limiting (100 requests per minute for CDN URL generation)
+  // Apply rate limiting - high limit to support users with large NFT collections
   const identifier = getClientIdentifier(request);
-  const rateLimit = lenientRateLimiter.check(identifier, 100);
+  const rateLimit = lenientRateLimiter.check(identifier, RATE_LIMIT_IMAGE_ENDPOINT);
 
   if (!rateLimit.success) {
     return NextResponse.json(

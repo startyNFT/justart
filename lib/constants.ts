@@ -21,6 +21,11 @@ export const RETRY_DELAY_BASE = 500; // Base delay in ms for exponential backoff
 export const FETCH_RETRY_ATTEMPTS = 3; // Retry attempts for fetch operations
 export const FETCH_RETRY_DELAY = 1000; // Delay between fetch retries in ms
 
+// Rate Limiting Configuration (requests per minute per client)
+export const RATE_LIMIT_IMAGE_ENDPOINT = 1000; // Image CDN: High limit for seamless NFT loading
+export const RATE_LIMIT_GALLERY_CREATE = 10; // Gallery creation: Low limit (expensive operation)
+export const RATE_LIMIT_STANDARD = 30; // Standard endpoints: Moderate limit
+
 // CDN Configuration
 export const CDN_BATCH_SIZE = 10; // Number of URLs to batch for CDN processing
 export const CDN_MAX_RETRIES = 2; // Maximum retries for CDN URL fetching
